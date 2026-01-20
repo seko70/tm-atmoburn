@@ -28,6 +28,7 @@ Simple colony and fleet tagging script. Just that. See example screenshot bellow
 
 ## TODO list
 - add icon to open Tag Manager, not only ALT-T
+- fix "Clear All" button
 - show tags in other contexts - colony/fleet overview, global targes etc
 - add filtering by tags - hide all NOT having the tag, hide all HAVING the tag
 - more colors/custom colors, customize size/style for tags
