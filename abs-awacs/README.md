@@ -12,7 +12,7 @@ UI for abs-archivist - display nearest fleets, colonies, rally points, wormholes
 
 ## How to use
 - Open colony or fleet screen.
-- Click on AWACS menu - all presentable objects are ... presented.
+- Click on [AWACS] in the top menu - all presentable objects are ... presented.
   - Note "Reference point" in the top left corner - it's a base (coordinates) for distance and direction info; it can be changed, or changes automaticall when appropriate
 - Use filterig buttons - by "Relation" and/or by "Type", for example:
   - Press button to show/hide specific objects
@@ -38,7 +38,14 @@ UI for abs-archivist - display nearest fleets, colonies, rally points, wormholes
 - ... (TBD)
 
 ## TODO list
-- ... (TBD)
+- Make more granular links/submenus, like [AWACS/My Colonies], [AWACS/All Colonies], [AWACS/My Fleets], [AWACS/All Fletts] etc for quick-jumping to what I need, except "All"
+- Add column "Shortest path" with optimal path using Wormholes (pre-calculated, Dijkstra/A-Star algorithm)
+- Add column "Shortest warp path" with optimal path using known refuel points for your fleet (with know range/maximal range), also using Wormholes
+- Colorize Distance (background?) by out-of-range (red), in maximal-range (orange), in-range (green)
+- Split ID a Signature columns (but fix auto-discovery for signatures in abs-archivist first), hide it if not relevant etc
+- Fix manual setting "Reference point"
+- Fix upper-right "Last update: __updateInfo__" - should be timestamp(s) of your last visit of Rally Points page, Fleet/Colony overview page etc
+- Maybe a decent coloring (backgroud) by object type for better owerview
 
 ## Screenshots
 Example1 - all object (colonies, fleets, rally points, wormholes...) - by default, sorted by distance from reference point (in this case, one of my fleets):

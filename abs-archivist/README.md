@@ -7,7 +7,8 @@ Parses and stores various entities while browsing AtmoBurn:
  - fleets (yours, or scanned)
  - rally points
  - and more
- See also `abs-awacs.user.js` script for in-game UI.
+
+See also `abs-awacs.user.js` script for in-game UI.
 
 ## How to install
 - You should have Tampermonkey (https://www.tampermonkey.net/) or equivalent
