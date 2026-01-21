@@ -35,12 +35,14 @@ UI for abs-archivist - display nearest fleets, colonies, rally points, wormholes
 > This is still under development. Beware!
 
 ## Known bugs
-- ... (TBD)
+- When you change / reload your parent page, AWACS window is non-functional, in general. At least I can it can be detected (document.opener?) and reset
+- Editing Reference point let you enter empty/illegal string and does not handle it correctly
 
 ## TODO list
 - Make more granular links/submenus, like [AWACS/My Colonies], [AWACS/All Colonies], [AWACS/My Fleets], [AWACS/All Fletts] etc for quick-jumping to what I need, except "All"
 - Add column "Shortest path" with optimal path using Wormholes (pre-calculated, Dijkstra/A-Star algorithm)
 - Add column "Shortest warp path" with optimal path using known refuel points for your fleet (with know range/maximal range), also using Wormholes
+- Export current table to xls/csv/spreadsheet
 - Colorize Distance (background?) by out-of-range (red), in maximal-range (orange), in-range (green)
 - Split ID a Signature columns (but fix auto-discovery for signatures in abs-archivist first), hide it if not relevant etc
 - Fix manual setting "Reference point"
