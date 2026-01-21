@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Archivist
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.9.1
+// @version      0.9.2
 // @description  Parses and stores various entities while browsing AtmoBurn; see Tampermonkey menu for some actions; see abs-awacs for in-game UI
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
@@ -394,7 +394,9 @@ const DEBUG = true;
             Parsing.parseWorldInfoFromLink(worldLink, colony, 'world', 'worldName');
             assert(colony.world, `No world determined for colony #${cid}`);
             // parse colony name
-            colony.name = Parsing.textContent(mid.querySelector('.pagetitle'));
+            colony.name = Parsing.textContent(
+                mid.querySelector('.pagetitle > div.flex_center') ?? mid.querySelector('.pagetitle')
+            );
             assert(colony.name, `No name found for colony #${cid}`);
             // pop and size
             const colonydropdown = mid.querySelectorAll('div.colonydropdown')
@@ -1050,17 +1052,17 @@ const DEBUG = true;
                 setTimeout(safeAsync(parseMyFleetsOverview), 100);
             } else if (urlstr.match(/atmoburn\.com\/fleet\.php/i) || urlstr.match(/atmoburn\.com\/fleet\//i)) {
                 xlog(`Fleet: ${urlstr}`);
-                setTimeout(safeAsync(parseFleetScreen), 100);
-                setTimeout(PureParser.parseColonyList, 200);
-                setTimeout(PureParser.parseFleetList, 200);
+                setTimeout(safeAsync(parseFleetScreen), 500);
+                setTimeout(PureParser.parseColonyList, 600);
+                setTimeout(PureParser.parseFleetList, 600);
             } else if (urlstr.match(/atmoburn\.com\/view_colony\.php/i)) {
                 xlog(`Colony: ${urlstr}`);
-                setTimeout(safeAsync(parseColonyScreen), 100);
-                setTimeout(PureParser.parseColonyList, 200);
-                setTimeout(PureParser.parseFleetList, 200);
+                setTimeout(safeAsync(parseColonyScreen), 500);
+                setTimeout(PureParser.parseColonyList, 600);
+                setTimeout(PureParser.parseFleetList, 600);
             } else if (urlstr.match(/atmoburn\.com\/known_universe\.php/i)) {
                 xlog(`Known Universe: ${urlstr}`);
-                setTimeout(safeAsync(parseKnownUniverse), 100);
+                setTimeout(safeAsync(parseKnownUniverse), 200);
             } else if (urlstr.match(/atmoburn\.com\/extras\/scan.php/i)) {
                 xlog(`Scan: ${urlstr}`);
                 setTimeout(safeAsync(parseScan), 500);
@@ -1072,7 +1074,7 @@ const DEBUG = true;
                 setTimeout(safeAsync(parseRallyPoints), 100);
             } else if (urlstr.match(/atmoburn\.com\/sensor_net\.php/i)) {
                 xlog(`Sensor Net: ${urlstr}`);
-                setTimeout(safeAsync(parseSensorNet), 100);
+                setTimeout(safeAsync(parseSensorNet), 200);
             }
         } catch (e) {
             notify('ARCH', e.message);
