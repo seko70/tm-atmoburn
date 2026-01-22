@@ -442,6 +442,9 @@ const DEBUG = true;
     // --- Parse helpers -----------------------------------------------------------
 
     const Parsing = {
+        makeIdFromString: function (s) {
+            return s?.toLowerCase().replace(/[^a-z0-9]/g, "");
+        },
         textContent: function (e) {
             return e?.textContent?.trim();
         },
@@ -587,7 +590,7 @@ const DEBUG = true;
             const toSystem = await fetchSystemInfo(wh.tsystem);
             [wh.tx, wh.ty, wh.tz] = [toSystem.x, toSystem.y, toSystem.z];
             // generate wormhole ID
-            wh.id = `${wh.name.replace('Wormhole ', '')}.${wh.system}`;
+            wh.id = `${Parsing.makeIdFromString(wh.name.replace('Wormhole ', ''))}.${wh.system}`;
             wormholes.push(wh);
         }
 

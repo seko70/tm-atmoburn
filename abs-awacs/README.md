@@ -12,16 +12,16 @@ UI for abs-archivist - display nearest fleets, colonies, rally points, wormholes
 
 ## How to use
 - Open colony or fleet screen.
-- Click on [AWACS] in the top menu - all presentable objects are ... presented.
+- Click on [AWACS] in the top menu - all presentable records are ... presented.
   - Note "Reference point" in the top left corner - it's a base (coordinates) for distance and direction info; it can be changed, or changes automaticall when appropriate
 - Use filterig buttons - by "Relation" and/or by "Type", for example:
-  - Press button to show/hide specific objects
-  - Press CTRL-button to show ONLY this specific objects
+  - Press button to show/hide specific records
+  - Press CTRL-button to show ONLY this specific records
 - Use header text filters to filter by name, player, ...
 - Use sorting arrow in some headers to sort
-- Object actions:
+- Records actions:
   - Press "compass" icon 🧭 (if present) to open detail screen (your fleet, or your colony)
-  - Press "laynch" icon 🚀️ (if present) to move your fleet to selected object (colony, enemy fleet...)
+  - Press "laynch" icon 🚀️ (if present) to move your fleet to selected record (colony, enemy fleet...)
   - Press "pointing hand" icon 👆 (if present) to make it reference point
 - In general, there are tooltips with details and/or explanation what it is or what id does
 - More to come... see TODO list.
@@ -36,21 +36,20 @@ UI for abs-archivist - display nearest fleets, colonies, rally points, wormholes
 
 ## Known bugs
 - When you change / reload your parent page, AWACS window is non-functional, in general. At least I can it can be detected (document.opener?) and reset
-- Editing Reference point let you enter empty/illegal string and does not handle it correctly
 
 ## TODO list
-- Make more granular links/submenus, like [AWACS/My Colonies], [AWACS/All Colonies], [AWACS/My Fleets], [AWACS/All Fletts] etc for quick-jumping to what I need, except "All"
 - Add column "Shortest path" with optimal path using Wormholes (pre-calculated, Dijkstra/A-Star algorithm)
 - Add column "Shortest warp path" with optimal path using known refuel points for your fleet (with know range/maximal range), also using Wormholes
 - Export current table to xls/csv/spreadsheet
 - Colorize Distance (background?) by out-of-range (red), in maximal-range (orange), in-range (green)
-- Split ID a Signature columns (but fix auto-discovery for signatures in abs-archivist first), hide it if not relevant etc
-- Fix manual setting "Reference point"
-- Fix upper-right "Last update: __updateInfo__" - should be timestamp(s) of your last visit of Rally Points page, Fleet/Colony overview page etc
-- Maybe a decent coloring (backgroud) by object type for better owerview
+- Implement upper-right "Last update: __updateInfo__" - should be timestamp(s) of your last visit of Rally Points page, Fleet/Colony overview page etc
+- Maybe a decent coloring (backgroud) by record type for better owerview
+- Add button/action for "map" (show on map)
+- Show RP comment as well (as tooltip, or searchable column)
+- Navigate to RP when clicked (RP page, not map - this is different action)
 
 ## Screenshots
-Example1 - all object (colonies, fleets, rally points, wormholes...) - by default, sorted by distance from reference point (in this case, one of my fleets):
+Example1 - all records (colonies, fleets, rally points, wormholes...) - by default, sorted by distance from reference point (in this case, one of my fleets):
 ![Example screenshot](doc/Screenshot1.png)
 
 Example2 - only my colonies (note that rows - and some columns as well - are hidden automatically):

@@ -35,7 +35,7 @@ Received data is stored/cached in DB as well (trying to be nice to server) and n
 > [!NOTE]
 > This script does not make other queries except API calls mentioned above. 
 
-What information it parses/stores:
+What entities are parsed and saved (created or updated):
 - Colonies (name, ID, global coordinates, system, world, pop, size, player, relation)
   - your colonies from Colony (detail) page
   - any colonies from "Scan" window (from fleet, or from colony)
@@ -50,6 +50,15 @@ What information it parses/stores:
   - from Rally points DB page (your and empire)
 - Wormholes (name, ID, system, global coordinates, target system, target coordinates)
     - from Wormholes search dialog in Intel/Known Universe menu
+
+When entities are deleted:
+- Your colonies: never? (see TODO)
+- Any colonies: when world is scanned and colony (by ID) is not there anymore
+- Your fleets: when fleet is not on Fleet overview page anymore
+- Any fleets: never? (see TODO)
+- Signatues: never? (same as Any fleets)
+- Rally points: when RP is not on the Rally points page anymore
+- Wormholes: never
 
 > [!WARNING]
 > You may lose your data when your browser history/data get deleted. See "Backup/Restore" part elsewhere in this document.
@@ -68,5 +77,5 @@ What information it parses/stores:
   - global coordinates for system/world info (decrease API calls)
   - fleet info without opening/parsing Sensor Net or Scan screes
   - many more :-)
-- Other fleets are not deleted, ever. Trying to formulate criteria/events for deleting the fleet (battle logs, expired after X days when not updated, etc) in general.
-- Many more...
+- Other fleets (then your own) are not deleted, ever. Trying to formulate criteria/events for deleting the fleet (battle logs, expired after X days when not updated, etc) in general.
+- Maybe fix Rally Point ID; make separate column for "empire" (1 or 0) and use internal RP ID that game exhibits (by edit/delete buttons)

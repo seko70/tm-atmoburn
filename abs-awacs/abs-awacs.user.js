@@ -42,7 +42,6 @@
     const MY_BLACK = "#111111";
     const DARK1 = "#2b2b2b";
     const DARK2 = "#242424";
-    const DARK3 = "#333333";
     const DARK4 = "#444444";
 
     // Relation constants
@@ -157,11 +156,6 @@
         console.warn('AWACS', msg, ...err);
     }
 
-    // simple helper, for shorter expressions
-    function byId(ele) {
-        return document.getElementById(ele);
-    }
-
     // Inject Tabulator from @resource into the POPUP so it’s evaluated in win
     async function ensureTabulatorIn(win) {
         const d = win.document;
@@ -201,6 +195,7 @@
                 isOn ? table.hideColumn("size") : table.showColumn("size");
             }
             if (value === Type.Fleet) {
+                isOn ? table.hideColumn("sig") : table.showColumn("ships");
                 isOn ? table.hideColumn("ships") : table.showColumn("ships");
                 isOn ? table.hideColumn("tonnage") : table.showColumn("tonnage");
             }
@@ -217,11 +212,9 @@
         const btn = doc.getElementById(elementId);
         if (btn) {
             btn.addEventListener("click", (e) => {
-                xlog(`EventListener for ${field} : ${value}`)
                 e.preventDefault();
                 e.stopPropagation();
                 if (e.ctrlKey) {
-                    xlog(`EventListener CTRL`)
                     // set current button filter off
                     _modifyFilter(table, field, value, false);
                     // set all others buttons on (in the same group)
@@ -234,11 +227,9 @@
                         });
                     }
                 } else {
-                    xlog(`EventListener ON ` + btn.classList)
                     btn.classList.toggle("on");
                     _modifyFilter(table, field, value, btn.classList.contains("on"));
                 }
-                xlog(`EventListener DONE`)
             });
         }
     }
@@ -247,23 +238,23 @@
         // global filter
         //table.addFilter("dist", "<", 1000);
         // filter by relation
-        _setupFilter(doc, table, "cbFilterMe", "rel", Relation.MY);
-        _setupFilter(doc, table, "cbFilterFriend", "rel", Relation.Friend);
-        _setupFilter(doc, table, "cbFilterNeutral", "rel", Relation.Neutral);
-        _setupFilter(doc, table, "cbFilterEnemy", "rel", Relation.Enemy);
+        _setupFilter(doc, table, "cbfMe", "rel", Relation.MY);
+        _setupFilter(doc, table, "cbfFriend", "rel", Relation.Friend);
+        _setupFilter(doc, table, "cbfNeutral", "rel", Relation.Neutral);
+        _setupFilter(doc, table, "cbfEnemy", "rel", Relation.Enemy);
         // filter by type
-        _setupFilter(doc, table, "cbFilterColony", "type", Type.Colony);
-        _setupFilter(doc, table, "cbFilterFleet", "type", Type.Fleet);
-        _setupFilter(doc, table, "cbFilterRP", "type", Type.RP);
-        _setupFilter(doc, table, "cbFilterWH", "type", Type.WH);
+        _setupFilter(doc, table, "cbfColony", "type", Type.Colony);
+        _setupFilter(doc, table, "cbfFleet", "type", Type.Fleet);
+        _setupFilter(doc, table, "cbfRP", "type", Type.RP);
+        _setupFilter(doc, table, "cbfWH", "type", Type.WH);
     }
 
     async function setReferencePoint() {
         let val = awacsWin.prompt("Input global coordinates as reference point", "");
         if (val === null) return; // cancel was pressed
-        refPoint = (([x, y, z]) => ({x, y, z}))(val.split(/[,\s]+/).map(Number));
-        refPoint.name = "(custom)";
-        refPoint.fid = null;
+        const [x, y, z] = val.split(/[,;\s]+/).map(Number);
+        if (x == null || y == null || z == null) return;
+        [refPoint.x, refPoint.y, refPoint.z, refPoint.name, refPoint.fid] = [x, y, z, "(custom)", null];
         await resetAwacsWindowInPlace();
     }
 
@@ -276,16 +267,16 @@
                     <span class="icon-btn" id="awacsRefEdit" title="Set new reference point">${ICON.Edit}</span>
                 </span>
                 <span id="filtersRel">
-                    <button class="tg cfyellow" id="cbFilterMe" title="Hide my own; use CTRL to show only my own">M</button>
-                    <button class="tg cfgreen" id="cbFilterFriend" title="Hide friends; use CTRL to show only friends">F</button>
-                    <button class="tg cfgray" id="cbFilterNeutral" title="Hide neutrals; use CTRL to show only neutrals">N</button>
-                    <button class="tg cfred" id="cbFilterEnemy" title="Hide enemies; use CTRL to show only enemies">E</button>
+                    <button class="tg cfyellow" id="cbfMe" title="Hide my own; use CTRL to show only my own">M</button>
+                    <button class="tg cfgreen" id="cbfFriend" title="Hide friends; use CTRL to show only friends">F</button>
+                    <button class="tg cfgray" id="cbfNeutral" title="Hide neutrals; use CTRL to show only neutrals">N</button>
+                    <button class="tg cfred" id="cbfEnemy" title="Hide enemies; use CTRL to show only enemies">E</button>
                 </span>
                 <span id="filtersType">&nbsp;&nbsp;&nbsp;
-                    <button class="tg" id="cbFilterColony" title="Hide colonies; use CTRL to show only colonies">${ICON.Colony}</button>
-                    <button class="tg" id="cbFilterFleet" title="Hide fleets; use CTRL to show only fleets">${ICON.Fleet}</button>
-                    <button class="tg" id="cbFilterRP" title="Hide rally points; use CTRL to show only rally points">${ICON.RP}</button>
-                    <button class="tg" id="cbFilterWH" title="Hide wormholes; use CTRL to show only wormholes">${ICON.WH}</button>
+                    <button class="tg" id="cbfColony" title="Hide colonies; use CTRL to show only colonies">${ICON.Colony}</button>
+                    <button class="tg" id="cbfFleet" title="Hide fleets; use CTRL to show only fleets">${ICON.Fleet}</button>
+                    <button class="tg" id="cbfRP" title="Hide rally points; use CTRL to show only rally points">${ICON.RP}</button>
+                    <button class="tg" id="cbfWH" title="Hide wormholes; use CTRL to show only wormholes">${ICON.WH}</button>
                 </span>
                 <span class="toplineright">Last update: __updateInfo__</span>
             </div>
@@ -325,14 +316,8 @@
 
         // add filter callbacs
         setupGlobalFilters(awacsWin.document, table);
-    }
 
-    function _fixUndefined(obj) {  // share this functions !!!
-        for (let key in obj) {
-            if (obj[key] == null || Number.isNaN(obj[key])) {
-                delete obj[key];
-            }
-        }
+        return table;
     }
 
     function _computeNavigateLink(objType, obj) {
@@ -379,7 +364,7 @@
     function _fillFrom(objType, icon, o) {
         const havePosition = o.x != null;
         const [horiz, vert] = havePosition ? absElevations(refPoint, o) : [null, null];
-        const rec = {
+        return {
             id: o.id,
             sig: o.signature,
             icon: icon,
@@ -391,7 +376,6 @@
             player: o.player,
             faction: o.faction,
             rel: o.relation ?? 'n',
-            relColor: REL_COLOR[o.relation] ?? "white",
             ships: o.ships,
             tonnage: o.tonnage,
             roster: o.roster,
@@ -410,8 +394,6 @@
             vert: havePosition ? `${vert}º` : null,
             ts: o.ts,
         };
-        //_fixUndefined(rec);
-        return rec;
     }
 
     async function addAllColonies(data) {
@@ -423,6 +405,9 @@
     async function addAllFleets(data) {
         await db.fleet.each(f => {
             data.push(_fillFrom(Type.Fleet, ICON.Fleet, f));
+        });
+        await db.signature.each(s => {
+            data.push(_fillFrom(Type.Fleet, ICON.RP, {...s, id: null, signature: s.id}));
         });
     }
 
@@ -507,7 +492,7 @@
         REF_COLOR: function (cell, formatterParams, onRendered) {
             const r = cell.getRow().getData();
             onRendered(function () {
-                cell.getElement().style.setProperty("color", r.relColor, "important");
+                cell.getElement().style.setProperty("color", REL_COLOR[r.rel] ?? "white", "important");
             });
             return cell.getValue();
         },
@@ -582,6 +567,8 @@
         }
         // Header tooltips
         const HTT = {
+            ID: "Identifier of the colony/fleet/rally point/wormhole etc",
+            SIG: "Signature of the fleet",
             TYPE: "Record type - and subtype, if exists, like (L)ocation, (C)olony, (F)leet, (W)ormhole, (T)arget",
             REL: "Player relation; (m)e,(f)riend,(n)eutral,(e)nemy",
             ACT: "Action buttons",
@@ -598,8 +585,9 @@
         const columns = [
             {title: "#", formatter: "rownum", width: 40, hozAlign: "center", headerSort: false},
             {title: "T", field: "type", width: 50, formatter: FMT.TYPE, headerTooltip: HTT.TYPE},
-            {title: "ID", field: "id", headerFilter: true, formatter: FMT.ID},
-            {title: "Name", field: "name", headerFilter: true, minWidth: 120, formatter: FMT.NAME},
+            {title: "ID", field: "id", headerFilter: true, width: 90, headerTooltip: HTT.ID},
+            {title: "Sig", field: "sig", headerFilter: true, width: 90, headerTooltip: HTT.SIG},
+            {title: "Name", field: "name", headerFilter: true, minWidth: 130, formatter: FMT.NAME},
             {title: "", field: "navigate", minWidth: 20, width: 20, headerSort: false, formatter: FMT.NAV, headerTooltip: HTT.ACT},
             {title: "", field: "launch", minWidth: 20, width: 20, headerSort: false, formatter: FMT.LNC, headerTooltip: HTT.ACT},
             {title: "Player", field: "player", headerFilter: true, minWidth: 70, formatter: FMT.REF_COLOR},
@@ -615,7 +603,7 @@
             {title: "Updated", field: "ts", headerSort: false, formatter: FMT.TS, tooltip: TT.UPDATED,}
         ];
         try {
-            await buildTabulatorInPopup({
+            return await buildTabulatorInPopup({
                 title: `AtmoBurn-AWACS: ${refPoint.name}`,
                 data, columns
             });
@@ -625,8 +613,18 @@
         }
     }
 
-    async function showStuff() {
+    function _presetFilters(presetFilters) {
+        if (presetFilters) {
+            for (const [btnName, state] of Object.entries(presetFilters)) {
+                const btn = awacsWin.document.getElementById(btnName);
+                if (btn) _setButtonState(btn, state);
+            }
+        }
+    }
+
+    async function showAllStuffDialog(presetFilters) {
         if (awacsWin && !awacsWin.closed) {
+            _presetFilters(presetFilters);
             awacsWin.focus();
         } else {
             awacsWin = window.open("", WINDOW_NAME, FEATURES);
@@ -638,22 +636,88 @@
                 awacsWin = window.open("", WINDOW_NAME, FEATURES);
             }
             awacsWin.__initialized = true;
-            await initializeAwacsWindow()
+            const table = await initializeAwacsWindow()
+            if (table && presetFilters) {
+                table.on("tableBuilt", function () {
+                    _presetFilters(presetFilters);
+                });
+            }
         }
+    }
+
+    async function showMyColoniesDialog() {
+        return showAllStuffDialog({
+            cbfMe: false, cbfFriend: true, cbfNeutral: true, cbfEnemy: true, cbfColony: false, cbfFleet: true, cbfRP: true, cbfWH: true
+        });
+    }
+
+    async function showAllColoniesDialog() {
+        return showAllStuffDialog({
+            cbfMe: false, cbfFriend: false, cbfNeutral: false, cbfEnemy: false, cbfColony: false, cbfFleet: true, cbfRP: true, cbfWH: true
+        });
+    }
+
+    async function showMyFleetsDialog() {
+        return showAllStuffDialog({
+            cbfMe: false, cbfFriend: true, cbfNeutral: true, cbfEnemy: true, cbfColony: true, cbfFleet: false, cbfRP: true, cbfWH: true,
+        });
+    }
+
+    async function showAllFleetsDialog() {
+        return showAllStuffDialog({
+            cbfMe: false, cbfFriend: false, cbfNeutral: false, cbfEnemy: false, cbfColony: true, cbfFleet: false, cbfRP: true, cbfWH: true,
+        });
+    }
+
+    async function showRallyPointsDialog() {
+        return showAllStuffDialog({
+            cbfMe: false, cbfFriend: false, cbfNeutral: false, cbfEnemy: false, cbfColony: true, cbfFleet: true, cbfRP: false, cbfWH: true,
+        });
+    }
+
+    async function showWormholesDialog() {
+        return showAllStuffDialog({
+            cbfMe: false, cbfFriend: false, cbfNeutral: false, cbfEnemy: false, cbfColony: true, cbfFleet: true, cbfRP: true, cbfWH: false
+        });
+    }
+
+    async function showAllDialog() {
+        return showAllStuffDialog({
+            cbfMe: false, cbfFriend: false, cbfNeutral: false, cbfEnemy: false, cbfColony: false, cbfFleet: false, cbfRP: false, cbfWH: false
+        });
     }
 
     function createMenu(topmenu) {
         // create menu item
         const e = document.createElement("li");
         e.id = "AWACSMenu";
-        e.innerHTML = `<a href="#" class="hide_mobile hide_small menu_title" id="awacsMenuTitle">[AWACS]</a>`;
+        e.innerHTML = `
+		<a href="#" class="hide_mobile hide_small menu_title" id="awacsMenuTitle">[AWACS]</a>
+		<div class="">
+			<ul> 
+				<li><a id="awacsMyColsMenu" style="color:${REL_COLOR.m}">${ICON.Colony}&nbsp;My Colonies</a></li>
+				<li><a id="awacsAllColsMenu">${ICON.Colony}&nbsp;All Colonies</a></li>
+				<li><a id="awacsMyFleetsMenu" style="color:${REL_COLOR.m}">${ICON.Fleet}&nbsp;My Fleets</a></li>
+				<li><a id="awacsAllFleetsMenu">${ICON.Fleet}&nbsp;All Fleets</a></li>
+				<li><a id="awacsRPMenu">${ICON.RP}&nbsp;Rally Points</a></li>
+				<li><a id="awacsWHMenu">${ICON.WH}&nbsp;Wormholes</a></li>
+				<li><a id="awacsAllMenu">${ICON.Colony}${ICON.Fleet}${ICON.RP}${ICON.WH}&nbsp;All Records</a></li>
+			</ul>
+		</div>`;
         topmenu.append(e);
+
         // append click listener(s)
-        byId("awacsMenuTitle").addEventListener('click', showStuff);
+        document.getElementById("awacsMyColsMenu").addEventListener('click', showMyColoniesDialog);
+        document.getElementById("awacsAllColsMenu").addEventListener('click', showAllColoniesDialog);
+        document.getElementById("awacsMyFleetsMenu").addEventListener('click', showMyFleetsDialog);
+        document.getElementById("awacsAllFleetsMenu").addEventListener('click', showAllFleetsDialog);
+        document.getElementById("awacsRPMenu").addEventListener('click', showRallyPointsDialog);
+        document.getElementById("awacsWHMenu").addEventListener('click', showWormholesDialog);
+        document.getElementById("awacsAllMenu").addEventListener('click', showAllDialog);
     }
 
     (async () => {
-        const topmenu = byId("topmenu");
+        const topmenu = document.getElementById("topmenu");
         if (topmenu) {
             createMenu(topmenu);
         }
