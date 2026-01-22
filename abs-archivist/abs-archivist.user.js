@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Archivist
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.9.2
+// @version      0.10.0
 // @description  Parses and stores various entities while browsing AtmoBurn; see Tampermonkey menu for some actions; see abs-awacs for in-game UI
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js

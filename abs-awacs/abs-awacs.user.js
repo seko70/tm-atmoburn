@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - AWACS
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.9.1
+// @version      0.10.0
 // @description  UI for abs-archivist - display nearest fleets, colonies, rally points in various contexts; uses data produced by abs-archivist
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
