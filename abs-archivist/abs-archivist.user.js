@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Archivist
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.10.0
+// @version      0.10.1
 // @description  Parses and stores various entities while browsing AtmoBurn; see Tampermonkey menu for some actions; see abs-awacs for in-game UI
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
@@ -70,6 +70,9 @@ const DEBUG = true;
 
     // --- Various helpers
 
+    // invisible, but harmless character; used to mark specific labels/names/tokens in html text
+    const ZWSP = "\u200B";
+    const ZWSP_RE = new RegExp(ZWSP + ".*$");
     // regex pattern to match and capture x,y,z coordinates (plain text)
     const XYZ_REGEX = /^\s*(-*\d+)[,\s]+(-*\d+)[,\s]+(-*\d+)/;
     // regex pattern to match and capture x,y,z coordinates (URL)
@@ -93,6 +96,15 @@ const DEBUG = true;
     // same as xlog, but as a warning
     function xerror(msg, ...err) {
         console.warn('ARCH', msg, ...err);
+    }
+
+    // removes eventual tags (see abs-tag-manager)
+    function stripTags(s) {
+        return s ? s.replace(ZWSP_RE, "") + ZWSP : s;
+    }
+
+    function useDefault(s, defaultValue = '???') {
+        return s && s.length > 0 ? s : defaultValue;
     }
 
     // simple helper, for shorter expressions
@@ -149,7 +161,7 @@ const DEBUG = true;
         const r = unsafeWindow.refPoint;
         if (obj) {
             copyXYZ(r, obj);
-            r.name = name ? name : obj.name;
+            r.name = useDefault(name, obj.name);
             r.fid = fid;
         } else {
             [r.x, r.y, r.z, r.name, r.fid] = [0, 0, 0, name ? name : "Center-Of-The-Universe", fid];
@@ -394,9 +406,9 @@ const DEBUG = true;
             Parsing.parseWorldInfoFromLink(worldLink, colony, 'world', 'worldName');
             assert(colony.world, `No world determined for colony #${cid}`);
             // parse colony name
-            colony.name = Parsing.textContent(
+            colony.name = stripTags(Parsing.textContent(
                 mid.querySelector('.pagetitle > div.flex_center') ?? mid.querySelector('.pagetitle')
-            );
+            ));
             assert(colony.name, `No name found for colony #${cid}`);
             // pop and size
             const colonydropdown = mid.querySelectorAll('div.colonydropdown')
@@ -413,6 +425,7 @@ const DEBUG = true;
                 const c = {};
                 const parsedOK = Parsing.parseColonyInfoFromLink(node, c, 'id', 'name');
                 assert(parsedOK, `Can't parse colony id/name from colony list node ${node?.outerHTML}`);
+                c.name = useDefault(stripTags(c.name));
                 c.style = node.getAttribute("style");
                 colonies.push(c);
             });
@@ -429,6 +442,7 @@ const DEBUG = true;
                 const f = {};
                 const parsedOK = Parsing.parseFleetInfoFromLink(node, f, 'id', 'name');
                 assert(parsedOK, `Can't parse fleet id/name from colony list node ${node?.outerHTML}`);
+                f.name = useDefault(stripTags(f.name));
                 f.style = node.getAttribute("style");
                 fleets.push(f);
             });
@@ -580,7 +594,7 @@ const DEBUG = true;
             assert(divs && divs.length >= 3, 'Wormhole record unrecognized');
             // parse wormhole name
             const wh = {ts: now, src: 'ku'};
-            wh.name = Parsing.textContent(divs[0]);
+            wh.name = useDefault(Parsing.textContent(divs[0]));
             // parse wormhole system
             Parsing.parseSystemInfoFromLink(divs[1], wh, 'system', null);
             const fromSystem = await fetchSystemInfo(wh.system);
@@ -685,8 +699,9 @@ const DEBUG = true;
         });
         [fleet.location, fleet.ts, fleet.relation, fleet.src] = [fleet.colonyName || fleet.worldName || fleet.systemName, now, Relation.MY, 'f'];
         // fleet name
-        const name = Parsing.textContent(parent.document.getElementById('pageHeadLine'));
-        fleet.name = name && name.length > 0 ? name : '???';
+        fleet.name = useDefault(stripTags(
+            Parsing.textContent(parent.document.getElementById('pageHeadLine'))
+        ));
         setRefPoint(fleet, fid);
         // check for confed/shared fleets
         const shared = Parsing.textContent(parent.document.getElementById('midcolumn').querySelector('div.subtext'));
