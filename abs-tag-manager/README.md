@@ -25,12 +25,10 @@ Simple colony and fleet tagging script. Just that. See example screenshot bellow
 > This is still under development. Beware!
 
 ## Known bugs
-- Deleting last tag does not remove it from the fleet/colony list, refreshing the page is needed.
-- Once tag is added, you can't change its color, nor create same tag (by name) with other color; tag identity should by defined by name/color pair, not only by name.
+- Tags are never removed from storage, ever
 
 ## TODO list
 - Add icon to open Tag Manager, not only ALT-T
-- Fix "Clear All" button
 - Show tags in other contexts - colony/fleet overview, global targets etc
 - Add filtering by tags - hide all NOT having the tag, hide all HAVING the tag
 - More colors/custom colors, customize size/style for tags

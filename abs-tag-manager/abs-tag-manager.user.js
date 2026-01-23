@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Tag Manager
 // @namespace    sk.seko
 // @license      MIT
-// @version      1.0.0
+// @version      1.1.0
 // @description  Simple fleet/colony tagging script; use ALT-T for tagging current fleet/colony
 // @match        https://*.atmoburn.com/*
 // @exclude    	 https://*.atmoburn.com/extras/view_universe.php*
@@ -238,22 +238,12 @@ GM key: "colony::tagIndexByName" or "fleet::tagIndexByName"
         ];
         const DEFAULT_COLOR = PALETTE[0].value;
 
-        // Constant suggestions WITH color
-        const CONSTANT_SUGGESTIONS = [
-            {name: "urgent", color: "#ff3333"},
-            {name: "todo", color: "#3b82f6"},
-            {name: "blocked", color: "#f97316"},
-            {name: "review", color: "#6366f1"},
-            {name: "done", color: "#22c55e"},
-        ].map(s => ({name: s.name.slice(0, MAX_CHARS), color: s.color}));
-
         const state = {
             objectId: "global",
             tags: [],
             currentColor: DEFAULT_COLOR,
             onChange: () => {
-            },
-            suggestionMap: new Map(), // name(lower) -> color
+            }
         };
 
         let modalEl = null;
@@ -291,14 +281,14 @@ GM key: "colony::tagIndexByName" or "fleet::tagIndexByName"
             return `${prefix}${n.toString(36)}`;
         }
 
-        function normName(name) {
-            return name.trim().toLowerCase();
+        function normName(name, color) {
+            return `${name.trim()}#${color.trim()}`.toLowerCase();
         }
 
         function getOrCreateTag(objectType, name, color) {
             const tagsById = gmGet(objectType, "tagsById", {});
             const tagIndexByName = gmGet(objectType, "tagIndexByName", {});
-            const key = normName(name);
+            const key = normName(name, color);
             const existing = tagIndexByName[key];
             if (existing) return existing;
             const tagId = nextId("t");
@@ -309,17 +299,18 @@ GM key: "colony::tagIndexByName" or "fleet::tagIndexByName"
             return tagId;
         }
 
-        function getAllTags(objectType) {
+        function getAllTags(objectType, objectId = null) {
             const allTags = gmGet(objectType, "allTags", {});
             const tagsById = gmGet(objectType, "tagsById", {});
-            return [allTags, tagsById];
+            if (!objectId) return [allTags, tagsById];
+            const tags = {[objectId]: (allTags[objectId] ? allTags[objectId] : [])};
+            return [tags, tagsById];
         }
 
         /*
          * Loads object tags (by object type), returns list of tags, in format: [{id:"t1","name":"Urgent","color":"#ff3b3b"},...]
          */
         function loadObjectTags(objectType, objectId) {
-            //console.log(`tags: Loading tags for ${objectType}, objectId=${objectId}`);
             const allTags = gmGet(objectType, "allTags", {});
             const tagIds = allTags[objectId];
             if (!tagIds || !tagIds.length) return [];
@@ -335,7 +326,6 @@ GM key: "colony::tagIndexByName" or "fleet::tagIndexByName"
         }
 
         function deleteTagFromObject(objectType, objectId, tagId) {
-            // console.log(`tags: Deleting tag #${tagId} from ${objectType} objectId=${objectId}`);
             const allTags = gmGet(objectType, "allTags", {});
             const tags = allTags[objectId];
             if (!Array.isArray(tags)) return false; // no change
@@ -344,19 +334,20 @@ GM key: "colony::tagIndexByName" or "fleet::tagIndexByName"
             tags.splice(idx, 1);
             if (tags.length === 0) delete allTags[objectId]; // fix empty records
             gmSet(objectType, "allTags", allTags);
-            // console.log(`tags: Deleted OK`);
             return true; // tags changed
         }
 
         function buildSuggestionPool() {
-            const others = Object.values(gmGet(state.objectType, "tagsById", {}));
+            const allTags = Object.values(gmGet(state.objectType, "tagsById", {}));
             const usedTagNames = new Set(state.tags.map(t => t.name));
-            const all = [...CONSTANT_SUGGESTIONS, ...others]
+            const all = allTags
                 .filter(s => s && s.name && s.color && !usedTagNames.has(s.name))
                 .map(s => ({name: s.name.slice(0, MAX_CHARS), color: s.color}));
-            state.suggestionMap.clear();
-            all.forEach(s => state.suggestionMap.set(s.name.toLowerCase(), s.color));
-            return all;
+            return [
+                ...new Map(all.map(item => [item.name, item])).values()
+            ].sort((a, b) =>
+                a.name.toLowerCase().localeCompare(b.name.toLowerCase())
+            );
         }
 
         function updateDatalist(prefix) {
@@ -433,9 +424,7 @@ GM key: "colony::tagIndexByName" or "fleet::tagIndexByName"
             addBtn.addEventListener("click", () => {
                 const raw = (nameIn.value || "").trim().slice(0, MAX_CHARS);
                 if (!raw) return;
-                const key = raw.toLowerCase();
-                const color = state.suggestionMap.get(key) || state.currentColor;
-                const tagId = getOrCreateTag(state.objectType, raw, color)
+                const tagId = getOrCreateTag(state.objectType, raw, state.currentColor)
                 addTagToObject(state.objectType, state.objectId, tagId);
                 state.tags = loadObjectTags(state.objectType, state.objectId);
                 nameIn.value = "";
@@ -445,9 +434,11 @@ GM key: "colony::tagIndexByName" or "fleet::tagIndexByName"
             });
 
             clearBtn.addEventListener("click", () => {
-                // FIXME fix clearAll
-                // state.tags = [];
-                // saveTags(state.objectId, state.tags);
+                if (!state.tags || !state.tags.length) return;
+                const allTags = gmGet(state.objectType, "allTags", {});
+                state.tags = [];
+                delete allTags[state.objectId];
+                gmSet(state.objectType, "allTags", allTags);
                 render();
             });
 
@@ -502,18 +493,17 @@ GM key: "colony::tagIndexByName" or "fleet::tagIndexByName"
         const ZWSP_RE = new RegExp(ZWSP + ".*$");
 
         function decorateLink(node, tagIds, tagsById) {
-            let txt = node.innerHTML.replace(ZWSP_RE, "") + ZWSP;
+            let txt = node.innerHTML.replace(ZWSP_RE, "") + (tagIds.length ? ZWSP : "");
             for (const tagId of tagIds) {
                 const tag = tagsById[tagId].name;
                 const color = tagsById[tagId].color;
-                txt += `&nbsp;<span style="color: ${color};"><i class="fa-solid fa-tag"></i>&nbsp;${tag}</span>`
+                txt += `&nbsp;<span style="color:${color};white-space:nowrap;"><i class="fa-solid fa-tag"></i>${tag}</span>`
             }
             node.innerHTML = txt;
         }
 
         function decorateAllColonies(allTags, tagsById) {
             for (const [objectId, tagIds] of Object.entries(allTags)) {
-                if (!tagIds || tagIds.length === 0) continue;
                 document.getElementById('colonylist').querySelectorAll(`a[href$="colony=${objectId}"]`).forEach((node) => {
                     try {
                         decorateLink(node, tagIds, tagsById);
@@ -544,10 +534,22 @@ GM key: "colony::tagIndexByName" or "fleet::tagIndexByName"
                         objectType: objectType,
                         objectId: objectId,
                         title: `Tags for ${objectType} #${objectId}`,
-                        onclose: decorateAll,
+                        onclose: function () {
+                            decorateSome(objectType, objectId);
+                        }
                     });
                 }
             });
+        }
+
+        function decorateSome(objectType, objectId) {
+            switch (objectType) {
+                case "colony":
+                    return decorateAllColonies(...TagManagerUI.getAllTags("colony", objectId));
+                case "fleet":
+                    return decorateAllFleets(...TagManagerUI.getAllTags("fleet"), objectId);
+            }
+            console.error("Unknown objectType:", objectType);
         }
 
         function decorateAll() {
