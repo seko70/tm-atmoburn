@@ -23,6 +23,7 @@ UI for abs-archivist - display nearest fleets, colonies, rally points, wormholes
   - Press "compass" icon 🧭 (if present) to open detail screen (your fleet, or your colony)
   - Press "laynch" icon 🚀️ (if present) to move your fleet to selected record (colony, enemy fleet...)
   - Press "pointing hand" icon 👆 (if present) to make it reference point
+- To export current view to CSV file, press the button "CSV" right of "filter" buttons 
 - In general, there are tooltips with details and/or explanation what it is or what id does
 - More to come... see TODO list.
 
@@ -40,7 +41,6 @@ UI for abs-archivist - display nearest fleets, colonies, rally points, wormholes
 ## TODO list
 - Add column "Shortest path" with optimal path using Wormholes (pre-calculated, Dijkstra/A-Star algorithm)
 - Add column "Shortest warp path" with optimal path using known refuel points for your fleet (with know range/maximal range), also using Wormholes
-- Export current table to xls/csv/spreadsheet
 - Colorize Distance (background?) by out-of-range (red), in maximal-range (orange), in-range (green)
 - Implement upper-right "Last update: __updateInfo__" - should be timestamp(s) of your last visit of Rally Points page, Fleet/Colony overview page etc
 - Maybe a decent coloring (backgroud) by record type for better owerview

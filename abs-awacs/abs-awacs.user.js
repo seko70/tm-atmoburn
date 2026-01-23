@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - AWACS
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.10.0
+// @version      0.11.0
 // @description  UI for abs-archivist - display nearest fleets, colonies, rally points in various contexts; uses data produced by abs-archivist
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
@@ -58,76 +58,50 @@
 
     // window style
     const ABS_WINDOW_STYLE = `
-        * { margin:0;padding:0;box-sizing:border-box;scrollbar-color:#383838 #292929; }
-        a { color:inherit; }
-        a.icon { text-decoration: none !important; }
+html { font-family:Arial,sans-serif; background-color:${DARK2}; color:${MY_GRAY}; }    
+* { margin:0; padding:0; box-sizing:border-box; }
+a { color:inherit; }
+a.icon { text-decoration: none !important; }
+.icon-btn { cursor: pointer; user-select: none; font-size: 15px; }
+.icon-btn:hover { filter: brightness(1.2); }
+.tabulator { font-size: 12px !important; background-color: ${DARK2} !important; color: ${MY_GRAY} !important; }
+.tabulator-header-contents { background-color: ${DARK2}; }
+.tabulator .tabulator-header .tabulator-col { background: ${DARK2} !important; }
+.tabulator-row .tabulator-cell { color: ${MY_GRAY} !important; padding: 2px !important; }
+.tabulator-row.tabulator-row-even { background-color: ${DARK1} !important; }
+.tabulator-row.tabulator-row-odd { background-color: ${DARK2} !important; }
+.tabulator-row.tabulator-selectable:hover { background-color: ${MY_BLACK} !important; }
+.tabulator .tabulator-header .tabulator-col input, .tabulator .tabulator-header .tabulator-col select { background-color: ${DARK2} !important; }
+.tabulator-row,.tabulator-cell { cursor: default !important; }
+.topline { display: flex; justify-content: center; align-items: center; background-color: ${DARK1} !important; padding: 4px 10px; }
+.toplineleft { margin-right: auto; }
+.toplineright {margin-left: auto; }
+.cfgreen { color: ${MY_GREEN}; }
+.cfgray { color: ${MY_GRAY}; }
+.cfred { color: ${MY_RED}; }
+.cfyellow { color: ${MY_YELLOW}; }
+.cborgange { color: ${MY_ORANGE}; }
+.tg {
+  min-width: 30px; height: 22px; padding: 0 6px; background: ${DARK4};
+  border-radius: 4px; border: 1px solid #999;
+  font-size: 11px; font-weight: 600; cursor: pointer; user-select: none;
+}
+.tg.on { filter: brightness(0.50); border-color: #4caf50; }
+.tg:active { transform: translateY(1px);}
+.tg.on:hover { filter: brightness(0.60); }
+.tg:hover { filter: brightness(0.90); }
+.tabulator .tabulator-header .tabulator-col .tabulator-col-content .tabulator-col-sorter .tabulator-arrow {
+    border-left: 3px solid transparent !important;
+    border-right: 3px solid transparent !important;
+}
+.tabulator .tabulator-header .tabulator-col.tabulator-sortable .tabulator-col-title { padding-right: 12px !important; }
+`;
 
-        .icon-btn {
-          cursor: pointer;
-          user-select: none;
-          font-size: 15px;
-        }
-        .icon-btn:hover {
-          filter: brightness(1.2);
-        }
-
-        .tabulator {
-            font-family: 'Arial', sans-serif !important;
-            font-size: 12px !important;
-            background-color: ${DARK2} !important;
-            color: #cccccc !important;
-        }
-        .tabulator-header-contents { background-color: ${DARK2}; }
-        .tabulator .tabulator-header .tabulator-col {
-            background: ${DARK2} !important;
-        }
-        .tabulator-row .tabulator-cell {
-            color: #cccccc !important;
-            padding: 2px !important;
-        }
-        .tabulator-row.tabulator-row-even {
-            background-color: ${DARK1} !important;
-        }
-        .tabulator-row.tabulator-row-odd {
-            background-color: ${DARK2} !important;
-        }
-        .tabulator-row.tabulator-selectable:hover {
-            background-color: ${MY_BLACK} !important;
-        }
-        .tabulator .tabulator-header .tabulator-col input, .tabulator .tabulator-header .tabulator-col select {
-            background-color: ${DARK2} !important;
-        }
-        .tabulator-row,.tabulator-cell {
-            cursor: default !important;
-        }
-        .topline {
-            display: flex; justify-content: center; align-items: center;
-            background-color: ${DARK1} !important; padding: 4px 10px;
-        }
-        .toplineleft { margin-right: auto; }
-        .toplineright {margin-left: auto; }
-        .cfgreen { color: ${MY_GREEN}; }
-        .cfgray { color: ${MY_GRAY}; }
-        .cfred { color: ${MY_RED}; }
-        .cfyellow { color: ${MY_YELLOW}; }
-        .cborgange { color: ${MY_ORANGE}; }
-        .tg {
-          min-width: 30px; height: 22px; padding: 0 6px; background: ${DARK4};
-          border-radius: 4px; border: 1px solid #999;
-          font-size: 11px; font-weight: 600; cursor: pointer; user-select: none;
-        }
-        .tg.on { filter: brightness(0.50); border-color: #4caf50; }
-        .tg:active { transform: translateY(1px);}
-        .tg.on:hover { filter: brightness(0.60); }
-        .tg:hover { filter: brightness(0.90); }
-        .tabulator .tabulator-header .tabulator-col .tabulator-col-content .tabulator-col-sorter .tabulator-arrow {
-            border-left: 3px solid transparent !important;
-            border-right: 3px solid transparent !important;
-        }
-        .tabulator .tabulator-header .tabulator-col.tabulator-sortable .tabulator-col-title {
-            padding-right: 12px !important;
-        }
-    `;
+    const LOADING_HTML = `<!doctype html>
+<html lang="C">
+    <head><meta name="color-scheme" content="dark"><style>:root{color-scheme:dark} html,body{background:${DARK2};color:#ccc}</style></head>
+    <body><div id="boot">LOADING…</div><div id="app"></div></body>
+</html>`;
 
     const WINDOW_NAME = 'awacs_popup';
     const FEATURES = 'scrollbars=no,resizable=no,status=no,location=no,toolbar=no,menubar=no,width=1200,height=800,left=200,top=50';
@@ -195,7 +169,7 @@
                 isOn ? table.hideColumn("size") : table.showColumn("size");
             }
             if (value === Type.Fleet) {
-                isOn ? table.hideColumn("sig") : table.showColumn("ships");
+                isOn ? table.hideColumn("sig") : table.showColumn("sig");
                 isOn ? table.hideColumn("ships") : table.showColumn("ships");
                 isOn ? table.hideColumn("tonnage") : table.showColumn("tonnage");
             }
@@ -203,9 +177,7 @@
     }
 
     function _setButtonState(btn, state) {
-        const isOn = btn.classList.contains("on");
-        if (isOn === state) return;
-        btn.click();
+        if (btn.classList.contains("on") !== state) btn.click();
     }
 
     function _setupFilter(doc, table, elementId, field, value) {
@@ -258,9 +230,14 @@
         await resetAwacsWindowInPlace();
     }
 
+    function exportToCSV(table) {
+        table.download("csv", "data.csv", {bom: true, delimiter: csvDelimiterByLocale()});
+    }
+
     async function buildTabulatorInPopup({title, data, columns, options = {}}) {
         // check for window already open
         const refPointStr = `<b>${refPoint.name}</b> (${refPoint.x},${refPoint.y},${refPoint.z})`;
+        awacsWin.document.open();
         awacsWin.document.write(`
             <div id="awacsHead" class="topline tabulator">
                 <span class="toplineleft cfyellow" title="Reference point for distance & elevations">${refPointStr}&nbsp;
@@ -278,13 +255,15 @@
                     <button class="tg" id="cbfRP" title="Hide rally points; use CTRL to show only rally points">${ICON.RP}</button>
                     <button class="tg" id="cbfWH" title="Hide wormholes; use CTRL to show only wormholes">${ICON.WH}</button>
                 </span>
+                <span id="filtersType">&nbsp;&nbsp;&nbsp;
+                    <button class="tg" id="exportCSV" title="Export current view to CSV file">CSV</button>
+                </span>
                 <span class="toplineright">Last update: __updateInfo__</span>
             </div>
             <div id="awacsTable"></div>
         `);
         awacsWin.document.title = title;
         awacsWin.document.getElementById("awacsRefEdit").addEventListener('click', setReferencePoint);
-
 
         // apply default/global style
         const styleElement = awacsWin.document.createElement('style');
@@ -316,6 +295,7 @@
 
         // add filter callbacs
         setupGlobalFilters(awacsWin.document, table);
+        awacsWin.document.close();
 
         return table;
     }
@@ -622,6 +602,12 @@
         }
     }
 
+    function csvDelimiterByLocale() {
+        // If decimal separator is "," then CSV delimiter is (almost always) ";"
+        const number = 1.1;
+        return number.toLocaleString().includes(",") ? ";" : ",";
+    }
+
     async function showAllStuffDialog(presetFilters) {
         if (awacsWin && !awacsWin.closed) {
             _presetFilters(presetFilters);
@@ -636,10 +622,18 @@
                 awacsWin = window.open("", WINDOW_NAME, FEATURES);
             }
             awacsWin.__initialized = true;
+            awacsWin.document.open();
+            awacsWin.document.write(LOADING_HTML);
+            awacsWin.document.close();
             const table = await initializeAwacsWindow()
             if (table && presetFilters) {
                 table.on("tableBuilt", function () {
                     _presetFilters(presetFilters);
+                });
+            }
+            if (table) {
+                awacsWin.document.getElementById("exportCSV").addEventListener('click', function () {
+                    exportToCSV(table);
                 });
             }
         }
