@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name           abs-shorter-nearest-unexplored-button
+// @name           AtmoBurn Services - Shorter "Nearest unexplored system" Button
 // @namespace      sk.seko
 // @description    Make button "Nearest unexplored system" shorter and yellow.
 // @updateURL      https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-shorter-nearest-unexplored-button/abs-shorter-nearest-unexplored-button.user.js
