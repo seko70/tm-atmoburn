@@ -503,8 +503,10 @@ GM key: "colony::tagIndexByName" or "fleet::tagIndexByName"
         }
 
         function decorateAllColonies(allTags, tagsById) {
+            const colonyList = document.getElementById('colonylist');
+            if (!colonyList) return;
             for (const [objectId, tagIds] of Object.entries(allTags)) {
-                document.getElementById('colonylist').querySelectorAll(`a[href$="colony=${objectId}"]`).forEach((node) => {
+                colonyList.querySelectorAll(`a[href$="colony=${objectId}"]`).forEach((node) => {
                     try {
                         decorateLink(node, tagIds, tagsById);
                     } catch (e) {
@@ -515,9 +517,10 @@ GM key: "colony::tagIndexByName" or "fleet::tagIndexByName"
         }
 
         function decorateAllFleets(allTags, tagsById) {
+            const fleetList = document.getElementById('fleetlist');
+            if (!fleetList) return;
             for (const [objectId, tagIds] of Object.entries(allTags)) {
-                if (!tagIds || tagIds.length === 0) continue;
-                document.getElementById('fleetlist').querySelectorAll(`a[href$="fleet=${objectId}"]`).forEach((node) => {
+                fleetList.querySelectorAll(`a[href$="fleet=${objectId}"]`).forEach((node) => {
                     try {
                         decorateLink(node, tagIds, tagsById);
                     } catch (e) {
