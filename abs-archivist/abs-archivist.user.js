@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Archivist
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.10.2
+// @version      0.10.3
 // @description  Parses and stores various entities while browsing AtmoBurn; see Tampermonkey menu for some actions; see abs-awacs for in-game UI
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
@@ -346,7 +346,7 @@ const DEBUG = true;
         if (s) return s;
         const url = `${WF_BASE_URL}/API/?c=system&ID=${sid}`;
         const response = await fetch(url);
-        xdebug(`fetchSystemInfo(id=${sid}) fetch response`, response);
+        //xdebug(`fetchSystemInfo(id=${sid}) fetch response`, response);
         assert(response.ok, `Error fetchnig ${url}, status: ${response.status}`);
         s = await response.json();
         if (!s) {
@@ -597,7 +597,7 @@ const DEBUG = true;
             const fromSystem = await fetchSystemInfo(wh.system);
             [wh.x, wh.y, wh.z] = [fromSystem.x, fromSystem.y, fromSystem.z];
             // parse wormhole target system
-            Parsing.parseSystemInfoFromLink(divs[2], wh, 'tsystem', null);
+            Parsing.parseSystemInfoFromLink(divs[3], wh, 'tsystem', null);
             const toSystem = await fetchSystemInfo(wh.tsystem);
             [wh.tx, wh.ty, wh.tz] = [toSystem.x, toSystem.y, toSystem.z];
             // generate wormhole ID
