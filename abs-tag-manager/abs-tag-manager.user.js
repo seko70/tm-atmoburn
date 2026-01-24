@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Tag Manager
 // @namespace    sk.seko
 // @license      MIT
-// @version      1.1.0
+// @version      1.1.1
 // @description  Simple fleet/colony tagging script; use ALT-T for tagging current fleet/colony
 // @match        https://*.atmoburn.com/*
 // @exclude    	 https://*.atmoburn.com/extras/view_universe.php*
