@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - AWACS
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.11.0
+// @version      0.12.0
 // @description  UI for abs-archivist - display nearest fleets, colonies, rally points in various contexts; uses data produced by abs-archivist
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
@@ -104,7 +104,7 @@ a.icon { text-decoration: none !important; }
 </html>`;
 
     const WINDOW_NAME = 'awacs_popup';
-    const FEATURES = 'scrollbars=no,resizable=no,status=no,location=no,toolbar=no,menubar=no,width=1200,height=800,left=200,top=50';
+    const FEATURES = 'scrollbars=no,resizable=no,status=no,location=no,toolbar=no,menubar=no,width=1000,height=800,left=200,top=50';
 
     // --- AWACS window (lazy init)
     let awacsWin = null;
@@ -493,12 +493,15 @@ a.icon { text-decoration: none !important; }
         },
         NAME: function (cell, _formatterParams, _onRendered) {
             const r = cell.getRow().getData();
+            if (r.launch && refPoint && refPoint.fid) {
+                const tooltip = `Launch '${refPoint.name}' toward '${r.name}'`;
+                return `${cell.getRow().getData().icon} <a href="${r.launch}" target="maingame" title="${tooltip}">${cell.getValue()}</a>`;
+            }
             if (r.navigate && r.rel === Relation.MY) {
                 const tooltip = `Open screen for '${r.name}'`;
                 return `${cell.getRow().getData().icon} <a href="${r.navigate}" target="maingame" title="${tooltip}">${cell.getValue()}</a>`;
-            } else {
-                return `${cell.getRow().getData().icon} ${cell.getValue()}`;
             }
+            return `${cell.getRow().getData().icon} ${cell.getValue()}`;
         },
         NAV: function (cell, _formatterParams, _onRendered) {
             const r = cell.getRow().getData();
@@ -564,12 +567,12 @@ a.icon { text-decoration: none !important; }
         // setup columns
         const columns = [
             {title: "#", formatter: "rownum", width: 40, hozAlign: "center", headerSort: false},
-            {title: "T", field: "type", width: 50, formatter: FMT.TYPE, headerTooltip: HTT.TYPE},
-            {title: "ID", field: "id", headerFilter: true, width: 90, headerTooltip: HTT.ID},
+            // {title: "T", field: "type", width: 50, formatter: FMT.TYPE, headerTooltip: HTT.TYPE},
+            {title: "ID", field: "id", headerFilter: true, width: 80, headerTooltip: HTT.ID},
             {title: "Sig", field: "sig", headerFilter: true, width: 90, headerTooltip: HTT.SIG},
             {title: "Name", field: "name", headerFilter: true, minWidth: 130, formatter: FMT.NAME},
-            {title: "", field: "navigate", minWidth: 20, width: 20, headerSort: false, formatter: FMT.NAV, headerTooltip: HTT.ACT},
-            {title: "", field: "launch", minWidth: 20, width: 20, headerSort: false, formatter: FMT.LNC, headerTooltip: HTT.ACT},
+            {title: "", field: "navigate", minWidth: 20, width: 25, headerSort: false, formatter: FMT.NAV, headerTooltip: HTT.ACT},
+            {title: "", field: "launch", minWidth: 20, width: 25, headerSort: false, formatter: FMT.LNC, headerTooltip: HTT.ACT},
             {title: "Player", field: "player", headerFilter: true, minWidth: 70, formatter: FMT.REF_COLOR},
             {title: "Rel", field: "rel", headerFilter: true, width: 50, headerSort: false, formatter: FMT.REF_COLOR, headerTooltip: HTT.REL},
             {title: "Position", field: "position", headerFilter: true, minWidth: 140, hozAlign: "right", tooltip: TT.REL},

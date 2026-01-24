@@ -23,7 +23,7 @@ UI for abs-archivist - display nearest fleets, colonies, rally points, wormholes
   - Press "compass" icon 🧭 (if present) to open detail screen (your fleet, or your colony)
   - Press "laynch" icon 🚀️ (if present) to move your fleet to selected record (colony, enemy fleet...)
   - Press "pointing hand" icon 👆 (if present) to make it reference point
-- To export current view to CSV file, press the button "CSV" right of "filter" buttons 
+- To export current view to CSV file, press the button "CSV" right of "filter" buttons
 - In general, there are tooltips with details and/or explanation what it is or what id does
 - More to come... see TODO list.
 
@@ -39,14 +39,18 @@ UI for abs-archivist - display nearest fleets, colonies, rally points, wormholes
 - When you change / reload your parent page, AWACS window is non-functional, in general. At least I can it can be detected (document.opener?) and reset
 
 ## TODO list
+- Performance optimization - minimalize processing of records
+- Do not open AWACS window multiple times (for one site)
 - Add column "Shortest path" with optimal path using Wormholes (pre-calculated, Dijkstra/A-Star algorithm)
 - Add column "Shortest warp path" with optimal path using known refuel points for your fleet (with know range/maximal range), also using Wormholes
 - Colorize Distance (background?) by out-of-range (red), in maximal-range (orange), in-range (green)
 - Implement upper-right "Last update: __updateInfo__" - should be timestamp(s) of your last visit of Rally Points page, Fleet/Colony overview page etc
-- Maybe a decent coloring (backgroud) by record type for better owerview
+- Maybe a decent coloring (backgroud) by record type for better owerview?
 - Add button/action for "map" (show on map)
-- Show RP comment as well (as tooltip, or searchable column)
+- Show RP comment and subtype as well (as tooltip, or searchable column)
 - Navigate to RP when clicked (RP page, not map - this is different action)
+- Minimap! Show small minimap with nearest targets, schematically (metro-like, maybe) for quick orientation "Where the heck am I?"
+- Show tags for colonies/fleets (from abs-tag-manager)
 
 ## Screenshots
 Example1 - all records (colonies, fleets, rally points, wormholes...) - by default, sorted by distance from reference point (in this case, one of my fleets):
