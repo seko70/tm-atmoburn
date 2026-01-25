@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Archivist
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.10.3
+// @version      0.10.4
 // @description  Parses and stores various entities while browsing AtmoBurn; see Tampermonkey menu for some actions; see abs-awacs for in-game UI
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
@@ -601,7 +601,7 @@ const DEBUG = true;
             const toSystem = await fetchSystemInfo(wh.tsystem);
             [wh.tx, wh.ty, wh.tz] = [toSystem.x, toSystem.y, toSystem.z];
             // generate wormhole ID
-            wh.id = `${Parsing.makeIdFromString(wh.name.replace('Wormhole ', ''))}.${wh.system}`;
+            wh.id = `#${Parsing.makeIdFromString(wh.name.replace('Wormhole ', ''))}.${wh.system}`;
             wormholes.push(wh);
         }
 
