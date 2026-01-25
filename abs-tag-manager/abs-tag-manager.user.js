@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Tag Manager
 // @namespace    sk.seko
 // @license      MIT
-// @version      1.1.1
+// @version      1.1.3
 // @description  Simple fleet/colony tagging script; use ALT-T for tagging current fleet/colony
 // @match        https://*.atmoburn.com/*
 // @exclude    	 https://*.atmoburn.com/extras/view_universe.php*
@@ -493,7 +493,7 @@ GM key: "colony::tagIndexByName" or "fleet::tagIndexByName"
         const ZWSP_RE = new RegExp(ZWSP + ".*$");
 
         function decorateLink(node, tagIds, tagsById) {
-            let txt = node.innerHTML.replace(ZWSP_RE, "") + (tagIds.length ? ZWSP : "");
+            let txt = node.innerHTML.replace(ZWSP_RE, "") + (tagIds.length ? `${ZWSP}&nbsp;` : "");
             for (const tagId of tagIds) {
                 const tag = tagsById[tagId].name;
                 const color = tagsById[tagId].color;
@@ -550,7 +550,7 @@ GM key: "colony::tagIndexByName" or "fleet::tagIndexByName"
                 case "colony":
                     return decorateAllColonies(...TagManagerUI.getAllTags("colony", objectId));
                 case "fleet":
-                    return decorateAllFleets(...TagManagerUI.getAllTags("fleet"), objectId);
+                    return decorateAllFleets(...TagManagerUI.getAllTags("fleet", objectId));
             }
             console.error("Unknown objectType:", objectType);
         }
