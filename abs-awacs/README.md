@@ -45,9 +45,7 @@ UI for abs-archivist - display nearest fleets, colonies, rally points, wormholes
 - Add column "Shortest warp path" with optimal path using known refuel points for your fleet (with know range/maximal range), also using Wormholes
 - Colorize Distance (background?) by out-of-range (red), in maximal-range (orange), in-range (green)
 - Implement upper-right "Last update: __updateInfo__" - should be timestamp(s) of your last visit of Rally Points page, Fleet/Colony overview page etc
-- Maybe a decent coloring (backgroud) by record type for better owerview?
 - Add button/action for "map" (show on map)
-- Show RP comment and subtype as well (as tooltip, or searchable column)
 - Navigate to RP when clicked (RP page, not map - this is different action)
 - Minimap! Show small minimap with nearest targets, schematically (metro-like, maybe) for quick orientation "Where the heck am I?"
 - Show tags for colonies/fleets (from abs-tag-manager)

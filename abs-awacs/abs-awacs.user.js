@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - AWACS
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.12.0
+// @version      0.13.0
 // @description  UI for abs-archivist - display nearest fleets, colonies, rally points in various contexts; uses data produced by abs-archivist
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
@@ -52,6 +52,9 @@
 
     // color map for relation value
     const REL_COLOR = {'e': MY_RED, 'f': MY_GREEN, 'n': MY_GRAY, 'm': MY_YELLOW,};
+
+    // Rally Points subtype code-to-name map
+    const RP_SUBTYPES = {'L': 'Location', 'C': 'Colony', 'F': 'Fleet', 'W': 'Wormhole', 'T': 'Target'};
 
     // icons for labels
     const ICON = {Colony: "👥", Fleet: "🛰️", WH: "🌀", RP: "🧾", Navigate: "🧭", Launch: "🚀️", Reference: "👆", Edit: "🖉"};
@@ -224,8 +227,8 @@ a.icon { text-decoration: none !important; }
     async function setReferencePoint() {
         let val = awacsWin.prompt("Input global coordinates as reference point", "");
         if (val === null) return; // cancel was pressed
-        const [x, y, z] = val.split(/[,;\s]+/).map(Number);
-        if (x == null || y == null || z == null) return;
+        const [x, y, z] = val.split(/[^0-9-]+/).map(Number);
+        if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return;
         [refPoint.x, refPoint.y, refPoint.z, refPoint.name, refPoint.fid] = [x, y, z, "(custom)", null];
         await resetAwacsWindowInPlace();
     }
@@ -240,8 +243,8 @@ a.icon { text-decoration: none !important; }
         awacsWin.document.open();
         awacsWin.document.write(`
             <div id="awacsHead" class="topline tabulator">
-                <span class="toplineleft cfyellow" title="Reference point for distance & elevations">${refPointStr}&nbsp;
-                    <span class="icon-btn" id="awacsRefEdit" title="Set new reference point">${ICON.Edit}</span>
+                <span class="toplineleft cfyellow" title="Reference point for distance, directions etc">${refPointStr}&nbsp;
+                    <span class="icon-btn" id="awacsRefEdit" title="Set custom Reference point (enter global coordinates)">${ICON.Edit}</span>
                 </span>
                 <span id="filtersRel">
                     <button class="tg cfyellow" id="cbfMe" title="Hide my own; use CTRL to show only my own">M</button>
@@ -351,6 +354,7 @@ a.icon { text-decoration: none !important; }
             type: objType,
             subtype: o.type,
             name: o.name,
+            comment: o.comment,
             navigate: _computeNavigateLink(objType, o),
             launch: _computeLaunchLink(objType, o),
             player: o.player,
@@ -435,15 +439,15 @@ a.icon { text-decoration: none !important; }
         return `${label}: <b>${value ?? "?"}</b>`
     }
 
+
     // Field tooltips
     const TT = {
         REL: function (e, cell, _onRendered) {
-            const row = cell.getRow().getData();
-            return `${_u("System", row.system)}<br>${_u("World", row.world)}<br>${_u("Location", row.location)}`;
+            const r = cell.getRow().getData();
+            return `${_u("System", r.system)}<br>${_u("World", r.world)}<br>${_u("Location", r.location)}`;
         },
         DIR: function (e, cell, _onRendered) {
-            const row = cell.getRow().getData();
-            return `${_u("Vertical elevation", row.vert)}`;
+            return `${_u("Vertical elevation", cell.getRow().getData().vert)}`;
         },
         SIZE: function (e, cell, _onRendered) {
             return `${_u("Roster", cell.getRow().getData().roster)}`;
@@ -469,16 +473,12 @@ a.icon { text-decoration: none !important; }
             });
             return tsFormat;
         },
-        REF_COLOR: function (cell, formatterParams, onRendered) {
-            const r = cell.getRow().getData();
+        REF_COLOR_FG: function (cell, formatterParams, onRendered) {
+            const color = REL_COLOR[cell.getRow().getData().rel] ?? "white"
             onRendered(function () {
-                cell.getElement().style.setProperty("color", REL_COLOR[r.rel] ?? "white", "important");
+                cell.getElement().style.setProperty("color", color, "important");
             });
             return cell.getValue();
-        },
-        TYPE: function (cell, _formatterParams, _onRendered) {
-            const subtype = cell.getRow().getData().subtype;
-            return subtype ? `${cell.getValue()} (${subtype})` : cell.getValue();
         },
         ID: function (cell, _formatterParams, _onRendered) {
             const sig = cell.getRow().getData().sig;
@@ -493,15 +493,19 @@ a.icon { text-decoration: none !important; }
         },
         NAME: function (cell, _formatterParams, _onRendered) {
             const r = cell.getRow().getData();
+            let name = `${cell.getValue()}`;
+            if (r.type === Type.RP) {
+                name += `<small> - (${RP_SUBTYPES[r.subtype] ?? "?"}) ${r.comment ? r.comment : ""}</small>`;
+            }
             if (r.launch && refPoint && refPoint.fid) {
                 const tooltip = `Launch '${refPoint.name}' toward '${r.name}'`;
-                return `${cell.getRow().getData().icon} <a href="${r.launch}" target="maingame" title="${tooltip}">${cell.getValue()}</a>`;
+                return `${r.icon} <a href="${r.launch}" target="maingame" title="${tooltip}">${name}</a>`;
             }
             if (r.navigate && r.rel === Relation.MY) {
                 const tooltip = `Open screen for '${r.name}'`;
-                return `${cell.getRow().getData().icon} <a href="${r.navigate}" target="maingame" title="${tooltip}">${cell.getValue()}</a>`;
+                return `${r.icon} <a href="${r.navigate}" target="maingame" title="${tooltip}">${name}</a>`;
             }
-            return `${cell.getRow().getData().icon} ${cell.getValue()}`;
+            return `${r.icon} ${cell.getValue()}`;
         },
         NAV: function (cell, _formatterParams, _onRendered) {
             const r = cell.getRow().getData();
@@ -568,22 +572,22 @@ a.icon { text-decoration: none !important; }
         const columns = [
             {title: "#", formatter: "rownum", width: 40, hozAlign: "center", headerSort: false},
             // {title: "T", field: "type", width: 50, formatter: FMT.TYPE, headerTooltip: HTT.TYPE},
-            {title: "ID", field: "id", headerFilter: true, width: 80, headerTooltip: HTT.ID},
-            {title: "Sig", field: "sig", headerFilter: true, width: 90, headerTooltip: HTT.SIG},
-            {title: "Name", field: "name", headerFilter: true, minWidth: 130, formatter: FMT.NAME},
+            {title: "ID", field: "id", headerFilter: true, width: 60, headerTooltip: HTT.ID},
+            {title: "Sig", field: "sig", headerFilter: true, width: 60, headerTooltip: HTT.SIG},
+            {title: "Name", field: "name", headerFilter: true, minWidth: 130, formatter: FMT.NAME, tooltip: TT.NAME},
             {title: "", field: "navigate", minWidth: 20, width: 25, headerSort: false, formatter: FMT.NAV, headerTooltip: HTT.ACT},
             {title: "", field: "launch", minWidth: 20, width: 25, headerSort: false, formatter: FMT.LNC, headerTooltip: HTT.ACT},
-            {title: "Player", field: "player", headerFilter: true, minWidth: 70, formatter: FMT.REF_COLOR},
-            {title: "Rel", field: "rel", headerFilter: true, width: 50, headerSort: false, formatter: FMT.REF_COLOR, headerTooltip: HTT.REL},
-            {title: "Position", field: "position", headerFilter: true, minWidth: 140, hozAlign: "right", tooltip: TT.REL},
+            {title: "Player", field: "player", headerFilter: true, minWidth: 70, formatter: FMT.REF_COLOR_FG},
+            {title: "Rel", field: "rel", headerFilter: true, width: 50, headerSort: false, formatter: FMT.REF_COLOR_FG, headerTooltip: HTT.REL},
+            {title: "Position", field: "position", headerFilter: true, minWidth: 140, maxWidth: 200, hozAlign: "right", tooltip: TT.REL},
             {title: "Dist", field: "dist", hozAlign: "right", width: 70, sorter: "number", headerTooltip: HTT.DIST, formatter: FMT.FIXED2},
             {title: "Dir", field: "horiz", hozAlign: "right", headerFilter: true, width: 50, headerSort: false, headerTooltip: HTT.DIR, tooltip: TT.DIR},
             {title: "", field: "ref", minWidth: 20, width: 20, headerSort: false, formatter: FMT.REF, headerTooltip: HTT.ACT, cellClick: CLCK.REF},
-            {title: "Pop", field: "pop", hozAlign: "right", width: 70, sorter: "number",},
-            {title: "Size", field: "size", hozAlign: "right", width: 70, sorter: "number",},
-            {title: "Ships", field: "ships", hozAlign: "right", width: 70, sorter: "number", tooltip: TT.SIZE,},
-            {title: "Tons", field: "tonnage", hozAlign: "right", width: 70, sorter: "number",},
-            {title: "Updated", field: "ts", headerSort: false, formatter: FMT.TS, tooltip: TT.UPDATED,}
+            {title: "Pop", field: "pop", hozAlign: "right", width: 60, sorter: "number"},
+            {title: "Size", field: "size", hozAlign: "right", width: 60, sorter: "number"},
+            {title: "Ships", field: "ships", hozAlign: "right", width: 65, sorter: "number", tooltip: TT.SIZE},
+            {title: "Tons", field: "tonnage", hozAlign: "right", width: 60, sorter: "number"},
+            {title: "Updated", field: "ts", headerSort: false, minWidth: 70, maxWidth: 120, formatter: FMT.TS, tooltip: TT.UPDATED}
         ];
         try {
             return await buildTabulatorInPopup({
