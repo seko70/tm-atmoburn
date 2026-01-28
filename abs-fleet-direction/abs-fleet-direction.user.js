@@ -8,7 +8,7 @@
 // @license        MIT
 // @match          https://*.atmoburn.com/fleet.php*
 // @match          https://*.atmoburn.com/fleet/*
-// @version        5.0.0
+// @version        5.0.1
 // @grant          none
 // ==/UserScript==
 
