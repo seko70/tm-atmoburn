@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Archivist
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.10.4
+// @version      0.10.5
 // @description  Parses and stores various entities while browsing AtmoBurn; see Tampermonkey menu for some actions; see abs-awacs for in-game UI
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
@@ -588,16 +588,20 @@ const DEBUG = true;
 
         async function _parseWormhole(row, wormholes) {
             const divs = row.querySelectorAll(':scope > div');
-            assert(divs && divs.length >= 3, 'Wormhole record unrecognized');
+            assert(divs && [4, 6].includes(divs.length), 'Wormhole record unrecognized');
+            // two variants of wormhole list exists
+            const targetSystemColumnNumber = divs.length === 6 ? 3 : 2;
             // parse wormhole name
             const wh = {ts: now, src: 'ku'};
             wh.name = useDefault(Parsing.textContent(divs[0]));
             // parse wormhole system
             Parsing.parseSystemInfoFromLink(divs[1], wh, 'system', null);
+            assert(wh.system);
             const fromSystem = await fetchSystemInfo(wh.system);
             [wh.x, wh.y, wh.z] = [fromSystem.x, fromSystem.y, fromSystem.z];
             // parse wormhole target system
-            Parsing.parseSystemInfoFromLink(divs[3], wh, 'tsystem', null);
+            Parsing.parseSystemInfoFromLink(divs[targetSystemColumnNumber], wh, 'tsystem', null);
+            assert(wh.tsystem);
             const toSystem = await fetchSystemInfo(wh.tsystem);
             [wh.tx, wh.ty, wh.tz] = [toSystem.x, toSystem.y, toSystem.z];
             // generate wormhole ID
