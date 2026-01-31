@@ -7,7 +7,7 @@
 // @homepageURL  https://github.com/seko70/tm-atmoburn/blob/main/abs-eliminate-empty-space-above-menus/README.md
 // @license      MIT
 // @match        https://*.atmoburn.com/*
-// @version      1.2
+// @version      1.2.0
 // @grant        none
 // ==/UserScript==
 
