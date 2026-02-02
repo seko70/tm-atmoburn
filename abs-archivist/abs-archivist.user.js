@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Archivist
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.10.5
+// @version      0.11.0
 // @description  Parses and stores various entities while browsing AtmoBurn; see Tampermonkey menu for some actions; see abs-awacs for in-game UI
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
@@ -265,11 +265,19 @@ const DEBUG = true;
         const keepIds = new Set(colonyList.map(obj => obj.id));
         const idsToDelete = await db.colony.where('world').equals(worldId).filter(x => !keepIds.has(x.id)).primaryKeys();
         xdebug('idsToDelete', idsToDelete);
-        if (!idsToDelete || idsToDelete.length <= 0)
-            return 0;
+        if (!idsToDelete || !idsToDelete.length) return 0;
         xdebug('deleting colonies', idsToDelete);
         await db.colony.bulkDelete(idsToDelete);
-        xlog('Deleted colonies at w#', worldId, idsToDelete);
+        return idsToDelete.length;
+    }
+
+    async function deleteMyMissingColonies(colonyList) { // delete all my colonies not in the list
+        const keepIds = new Set(colonyList.map(obj => obj.id));
+        const idsToDelete = await db.colony.where('relation').equals(Relation.MY).filter(x => !keepIds.has(x.id)).primaryKeys();
+        xdebug('idsToDelete', idsToDelete);
+        if (!idsToDelete || !idsToDelete.length) return 0;
+        xdebug('deleting colonies', idsToDelete);
+        await db.colony.bulkDelete(idsToDelete);
         return idsToDelete.length;
     }
 
@@ -280,11 +288,8 @@ const DEBUG = true;
     async function deleteMissingFleets(myFleetList) { // delete all my fleets not on the list
         const keepIds = new Set(myFleetList.map(obj => obj.id));
         const idsToDelete = await db.fleet.where('relation').equals(Relation.MY).filter(f => !keepIds.has(f.id)).primaryKeys();
-        if (!idsToDelete || idsToDelete.length <= 0)
-            return 0;
-        //xdebug('deleteing fleets', idsToDelete);
+        if (!idsToDelete || !idsToDelete.length) return 0;
         await db.fleet.bulkDelete(idsToDelete);
-        xlog('Deleted my fleets', idsToDelete);
         return idsToDelete.length;
     }
 
@@ -292,9 +297,7 @@ const DEBUG = true;
         const keepIds = new Set(myRPList.map(obj => obj.id));
         const prefixToDelete = `#${empiredb}.`
         const idsToDelete = await db.rp.filter(r => r.id.startsWith(prefixToDelete) && !keepIds.has(r.id)).primaryKeys();
-        if (!idsToDelete || idsToDelete.length <= 0)
-            return 0;
-        //xdebug('deleting RPs', idsToDelete);
+        if (!idsToDelete || !idsToDelete.length) return 0;
         await db.rp.bulkDelete(idsToDelete);
         xlog('Deleted RP', idsToDelete);
         return idsToDelete.length;
@@ -661,10 +664,9 @@ const DEBUG = true;
         }
         // save (create, update, delete) parsed items
         const saved = await bulkSave('fleet', fleets);
-        const deleted = await deleteMissingFleets(fleets)
         // note timestamp for this screen
         storeTimestamp(StoredTimestamps.Fleets, now);
-        xlog(`Stored/deleted fleets: ${saved}/${deleted}`);
+        xlog(`Stored fleets: ${saved}`);
     }
 
     async function parseFleetScreen() {
@@ -738,6 +740,23 @@ const DEBUG = true;
         setRefPoint(colony);
         await save('colony', colony);
         xlog("Updated colony", colony);
+    }
+
+    async function parseSideLists() {
+        try {
+            const myColonies = PureParser.parseColonyList();
+            const deleted = await deleteMyMissingColonies(myColonies);
+            xlog(`Deleted my missing colonies: ${deleted}`);
+        } catch (err) {
+            notify('Error while parsing/processing side colony list', err);
+        }
+        try {
+            const myFleets = PureParser.parseFleetList();
+            const deleted = await deleteMissingFleets(myFleets);
+            xlog(`Deleted my missing fleets: ${deleted}`);
+        } catch (err) {
+            notify('Error while parsing/processing side fleet list', err);
+        }
     }
 
     async function parseScan() {
@@ -830,7 +849,8 @@ const DEBUG = true;
             // save (create or update) colonies, delete ones that do not exist anymore
             await bulkUpdate('colony', colonies);
             xlog('Updated colonies at w#', scanner.world, colonies);
-            await deleteMissingColonies(colonies, scanner.world);
+            const deleted = await deleteMissingColonies(colonies, scanner.world);
+            xlog(`Colonies at world #${scanner.world}: updated=${colonies.length}, deleted=${deleted}`);
         }
 
         let obj = null;
@@ -1067,13 +1087,11 @@ const DEBUG = true;
             } else if (urlstr.match(/atmoburn\.com\/fleet\.php/i) || urlstr.match(/atmoburn\.com\/fleet\//i)) {
                 xlog(`Fleet: ${urlstr}`);
                 setTimeout(safeAsync(parseFleetScreen), 500);
-                setTimeout(PureParser.parseColonyList, 600);
-                setTimeout(PureParser.parseFleetList, 600);
+                setTimeout(safeAsync(parseSideLists), 600);
             } else if (urlstr.match(/atmoburn\.com\/view_colony\.php/i)) {
                 xlog(`Colony: ${urlstr}`);
                 setTimeout(safeAsync(parseColonyScreen), 500);
-                setTimeout(PureParser.parseColonyList, 600);
-                setTimeout(PureParser.parseFleetList, 600);
+                setTimeout(safeAsync(parseSideLists), 600);
             } else if (urlstr.match(/atmoburn\.com\/known_universe\.php/i)) {
                 xlog(`Known Universe: ${urlstr}`);
                 setTimeout(safeAsync(parseKnownUniverse), 200);
