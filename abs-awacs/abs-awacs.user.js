@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - AWACS
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.13.0
+// @version      0.13.1
 // @description  UI for abs-archivist - display nearest fleets, colonies, rally points in various contexts; uses data produced by abs-archivist
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
@@ -459,8 +459,15 @@ a.icon { text-decoration: none !important; }
 
     // Formatters
     const FMT = {
-        FIXED2: function (cell) {
-            return cell.getValue()?.toFixed(2);
+        FIXED2: function (cell, formatterParams, onRendered) {
+            const dist = cell.getValue()?.toFixed(2);
+            const color = dist < 0.5 ? MY_YELLOW : dist < 100.0 ? MY_GREEN : dist < 250.0 ? MY_RED : null;
+            if (color) {
+                onRendered(function () {
+                    cell.getElement().style.setProperty("color", color, "important");
+                });
+            }
+            return dist;
         },
         TS: function (cell, formatterParams, onRendered) {
             const ts = cell.getValue();
@@ -579,7 +586,7 @@ a.icon { text-decoration: none !important; }
             {title: "", field: "launch", minWidth: 20, width: 25, headerSort: false, formatter: FMT.LNC, headerTooltip: HTT.ACT},
             {title: "Player", field: "player", headerFilter: true, minWidth: 70, formatter: FMT.REF_COLOR_FG},
             {title: "Rel", field: "rel", headerFilter: true, width: 50, headerSort: false, formatter: FMT.REF_COLOR_FG, headerTooltip: HTT.REL},
-            {title: "Position", field: "position", headerFilter: true, minWidth: 140, maxWidth: 200, hozAlign: "right", tooltip: TT.REL},
+            {title: "Position", field: "position", headerFilter: true, minWidth: 40, maxWidth: 200, hozAlign: "right", tooltip: TT.REL},
             {title: "Dist", field: "dist", hozAlign: "right", width: 70, sorter: "number", headerTooltip: HTT.DIST, formatter: FMT.FIXED2},
             {title: "Dir", field: "horiz", hozAlign: "right", headerFilter: true, width: 50, headerSort: false, headerTooltip: HTT.DIR, tooltip: TT.DIR},
             {title: "", field: "ref", minWidth: 20, width: 20, headerSort: false, formatter: FMT.REF, headerTooltip: HTT.ACT, cellClick: CLCK.REF},
