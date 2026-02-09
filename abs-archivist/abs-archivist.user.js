@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Archivist
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.11.0
+// @version      0.12.0
 // @description  Parses and stores various entities while browsing AtmoBurn; see Tampermonkey menu for some actions; see abs-awacs for in-game UI
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
@@ -18,8 +18,8 @@
 // @match        https://*.atmoburn.com/sensor_net.php*
 // @run-at       document-end
 // @require      https://cdn.jsdelivr.net/npm/dexie@4.2.1/dist/dexie.min.js
-// @require      https://github.com/seko70/tm-atmoburn/raw/refs/tags/commons/abs-utils/v1.1.0/commons/abs-utils.js
-// @require      https://github.com/seko70/tm-atmoburn/raw/refs/tags/commons/atmoburn-service-db/v1.0.2/commons/atmoburn-service-db.js
+// @require      https://github.com/seko70/tm-atmoburn/raw/refs/tags/commons/abs-utils/v1.2.0/commons/abs-utils.js
+// @require      https://github.com/seko70/tm-atmoburn/raw/refs/tags/commons/atmoburn-service-db/v1.1.1/commons/atmoburn-service-db.js
 // @grant        GM_registerMenuCommand
 // @grant        GM_notification
 // @grant        unsafeWindow
@@ -103,17 +103,9 @@ const DEBUG = true;
         return s ? s.replace(ZWSP_RE, "") + ZWSP : s;
     }
 
-    function useDefault(s, defaultValue = '???') {
-        return s && s.length > 0 ? s : defaultValue;
-    }
-
     // simple helper, for shorter expressions
     function byId(ele) {
         return document.getElementById(ele);
-    }
-
-    function lastElement(array) {
-        return array && array.length > 0 ? array[array.length - 1] : null;
     }
 
     // functor, catches and logs/notifies the error, so it's not lost in async hell...
@@ -746,14 +738,14 @@ const DEBUG = true;
         try {
             const myColonies = PureParser.parseColonyList();
             const deleted = await deleteMyMissingColonies(myColonies);
-            xlog(`Deleted my missing colonies: ${deleted}`);
+            if (deleted) xlog(`Deleted my missing colonies: ${deleted}`);
         } catch (err) {
             notify('Error while parsing/processing side colony list', err);
         }
         try {
             const myFleets = PureParser.parseFleetList();
             const deleted = await deleteMissingFleets(myFleets);
-            xlog(`Deleted my missing fleets: ${deleted}`);
+            if (deleted) xlog(`Deleted my missing fleets: ${deleted}`);
         } catch (err) {
             notify('Error while parsing/processing side fleet list', err);
         }
@@ -808,7 +800,7 @@ const DEBUG = true;
                 Parsing.parseInfoFromLink(flink, /tfleet=(\d+)/, f, 'id', 'name');
                 f.faction = Parsing.textContent(r2cols[1]);
                 //f.location = Parsing.textContent(r2cols[2]);
-                const loclink = lastElement(r2cols[2].querySelectorAll("span.fakeLink"));
+                const loclink = last(r2cols[2].querySelectorAll("span.fakeLink"));
                 Parsing.parseFleetLocationFromLink(f, loclink, scanner);
                 f.speed = Parsing.textContent(r2cols[4]);
                 // third row
@@ -986,7 +978,7 @@ const DEBUG = true;
             sig.tonnage = Parsing.textContent(divs110[1].querySelectorAll(':scope > div')[1]);
             sig.speed = firstWordOf(Parsing.textContent(divs110[3].querySelectorAll(':scope > div')[1]));
             const divs111 = divs11[1].querySelectorAll(':scope > div');
-            const loclink = lastElement(divs111[0].querySelectorAll("span.fakeLink")) ?? Parsing.textContent(lastElement(divs111[0].querySelectorAll("div")));
+            const loclink = last(divs111[0].querySelectorAll("span.fakeLink")) ?? Parsing.textContent(last(divs111[0].querySelectorAll("div")));
             // fourth row
             sig.roster = Array.from(divs[2].querySelectorAll(':scope > div')).map(x => Parsing.textContent(x)).join(",");
             // process the data

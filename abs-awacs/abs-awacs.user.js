@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - AWACS
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.13.1
+// @version      0.14.0
 // @description  UI for abs-archivist - display nearest fleets, colonies, rally points in various contexts; uses data produced by abs-archivist
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
@@ -12,8 +12,8 @@
 // @match        https://*.atmoburn.com/view_colony.php*
 // @run-at       document-end
 // @require      https://cdn.jsdelivr.net/npm/dexie@4.2.1/dist/dexie.min.js
-// @require      https://github.com/seko70/tm-atmoburn/raw/refs/tags/commons/abs-utils/v1.1.0/commons/abs-utils.js
-// @require      https://github.com/seko70/tm-atmoburn/raw/refs/tags/commons/atmoburn-service-db/v1.0.2/commons/atmoburn-service-db.js
+// @require      https://github.com/seko70/tm-atmoburn/raw/refs/tags/commons/abs-utils/v1.2.0/commons/abs-utils.js
+// @require      https://github.com/seko70/tm-atmoburn/raw/refs/tags/commons/atmoburn-service-db/v1.1.1/commons/atmoburn-service-db.js
 // @resource     TABULATOR_JS  https://unpkg.com/tabulator-tables@6.3.1/dist/js/tabulator.min.js
 // @resource     TABULATOR_CSS https://unpkg.com/tabulator-tables@6.3.1/dist/css/tabulator_site_dark.min.css
 // @grant        GM_registerMenuCommand
