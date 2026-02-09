@@ -8,7 +8,8 @@
 // @license        MIT
 // @match          https://*.atmoburn.com/fleet.php*
 // @match          https://*.atmoburn.com/fleet/*
-// @version        5.0.1
+// @version        5.1.0
+// @require        https://github.com/seko70/tm-atmoburn/raw/refs/tags/commons/abs-utils/v1.2.0/commons/abs-utils.js
 // @grant          none
 // ==/UserScript==
 
@@ -23,6 +24,7 @@
 // Version 4.1.2 = small visual fix
 // Version 4.2.0 = small formal changes
 // Version 5.0.0 = Show (unicode) arrows instead of clock notation
+// Version 5.1.0 = Added clock notation to compass as well
 
 /* jshint esversion: 11 */
 /* jshint node: true */
@@ -35,52 +37,6 @@
 
     function parse_xyz(s) {
         return s.match(globalRegex);
-    }
-
-    function rad2deg(angle) {
-        return angle * 57.29577951308232; // angle / Math.PI * 180
-    }
-
-    // convert horizontal direction in degrees to arrow
-    function arrowFromDeg(deg) {
-        if (deg == null) return '-';
-        // normalize to <0, 360)
-        deg = ((deg % 360) + 360) % 360;
-        // nearest sector (add half-sector = 22.5° then floor)
-        const idx = Math.floor((deg + 22.5) / 45) % 8;
-        return arrows[idx];
-    }
-
-    // convert horizontal direction in degrees to compas direction (S,N,E,W,...)
-    function compassFromDeg(deg) {
-        if (deg == null) return '-';
-        return ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.round(deg / 45) % 8];
-    }
-
-    // return horizontal direction in degrees (0-180), 0 is "north"
-    function horizontalDeg(p1, p2) {
-        const dx = p2[1] - p1[1];
-        const dy = p2[2] - p1[2];
-        if (dx === 0 && dy === 0) return null; // no direction
-        const deg = rad2deg(Math.atan2(dx, dy));
-        return Math.round(deg < 0 ? deg + 360 : deg);
-    }
-
-    // return vertical direction, in degrees (-90,90)
-    function verticalDeg(p1, p2) {
-        const dz = p2[3] - p1[3];
-        if (dz === 0) return 0;
-        const dx = p2[1] - p1[1];
-        const dy = p2[2] - p1[2];
-        const dxy = Math.round(Math.sqrt(dx * dx + dy * dy));
-        if (dxy === 0) return dz > 0 ? 90 : -90;
-        let vert = Math.round(rad2deg(Math.atan2(dz, dxy)));
-        if (vert < -90) {
-            vert = -180 - vert;
-        } else if (vert > 90) {
-            vert = 180 - vert;
-        }
-        return vert;
     }
 
     function showIt() {
@@ -100,12 +56,13 @@
         }
         const t1 = parse_xyz(p1.textContent);
         const t2 = parse_xyz(p2.textContent);
-        const h = horizontalDeg(t1, t2);
-        const v = verticalDeg(t1, t2);
-        const elem = document.createElement('span');
+        const dirs = absDirections({x: t1[1], y: t1[2], z: t1[3]}, {x: t2[1], y: t2[2], z: t2[3]});
+        //const h = horizontalDeg(t1, t2);
+        //const v = verticalDeg(t1, t2);
         const bs = "&nbsp;&nbsp;&nbsp;"; // big HTML space
-        const tooltip = `Horizontal: ${h == null ? '-' : h}º\nVertical: ${v}º`;
-        const dir = (h != null) ? `${arrowFromDeg(h)} (${compassFromDeg(h)})` : (v > 0) ? '(UP)' : (v < 0) ? '(DOWN)' : '-';
+        const tooltip = `Horizontal: ${dirs.h == null ? '-' : dirs.h}º\nVertical: ${dirs.v}º`;
+        const dir = (dirs.h != null) ? `${dirs.arrow} (${dirs.compass}, ${dirs.clock}°)` : (dirs.v > 0) ? '(UP)' : (dirs.v < 0) ? '(DOWN)' : '-';
+        const elem = document.createElement('span');
         elem.innerHTML = `${bs}<span style="font-size: larger" title="${tooltip}">${dir}</span>`;
         elem.style.color = "yellow";
         elem.title = "Horizontal direction (in o'clock notation), and vertical direction (in degrees)";
