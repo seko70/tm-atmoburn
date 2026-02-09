@@ -57,8 +57,6 @@
         const t1 = parse_xyz(p1.textContent);
         const t2 = parse_xyz(p2.textContent);
         const dirs = absDirections({x: t1[1], y: t1[2], z: t1[3]}, {x: t2[1], y: t2[2], z: t2[3]});
-        //const h = horizontalDeg(t1, t2);
-        //const v = verticalDeg(t1, t2);
         const bs = "&nbsp;&nbsp;&nbsp;"; // big HTML space
         const tooltip = `Horizontal: ${dirs.h == null ? '-' : dirs.h}º\nVertical: ${dirs.v}º`;
         const dir = (dirs.h != null) ? `${dirs.arrow} (${dirs.compass}, ${dirs.clock}°)` : (dirs.v > 0) ? '(UP)' : (dirs.v < 0) ? '(DOWN)' : '-';
