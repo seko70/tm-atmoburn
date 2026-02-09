@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Tag Manager
 // @namespace    sk.seko
 // @license      MIT
-// @version      2.0.1
+// @version      2.0.2
 // @description  Simple fleet/colony tagging script; use ALT-T for tagging current fleet/colony
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-tag-manager/abs-tag-manager.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-tag-manager/abs-tag-manager.user.js
@@ -258,12 +258,12 @@
             {name: "Yellow", value: "#ffff00"},
             {name: "Red", value: "#ff3333"},
             {name: "Orange", value: "#f97316"},
-            {name: "Amber", value: "#f59e0b"},
+            {name: "Amber", value: "#e19e0b"},
             {name: "Green", value: "#22c55e"},
             {name: "Teal", value: "#14b8a6"},
-            {name: "Blue", value: "#3b82f6"},
-            {name: "Indigo", value: "#6366f1"},
-            {name: "Violet", value: "#8b5cf6"},
+            {name: "Blue", value: "#5b82f6"},
+            {name: "Indigo", value: "#6333ff"},
+            {name: "Violet", value: "#a05ce6"},
             {name: "Pink", value: "#ec4899"},
             {name: "Gray", value: "#9ca3af"},
         ];
@@ -639,7 +639,7 @@
             const urlstr = document.URL;
             const colonyTags = await TagDB.getAllRecordsMap("colony")
             const fleetTags = await TagDB.getAllRecordsMap("fleet")
-            if (urlstr.match(/atmoburn\.com\/view_colony\.php/i)) {
+            if (urlstr.match(/atmoburn\.com\/[a-zA-Z_]+\.php\?colony=/i)) {
                 const objectId = parseIdFromURL(COLONY_ID_RE);
                 if (objectId) {
                     addTagManagerListener("colony", objectId);
