@@ -1,4 +1,4 @@
-/* shared-atmoburn-service-db - shared DB for atmoburn greasemonkey plugins (abs-archivist and more); version 1.1.0 */
+/* shared-atmoburn-service-db - shared DB for atmoburn greasemonkey plugins (abs-archivist and more); version 1.1.1 */
 // !!! requires Dexie to be loaded before this file
 
 (function (global) {
@@ -19,7 +19,7 @@
     });
 
     // CHANGES: primary key 'id' is now unique, explicitly; Rally Points don't need "relation" and "type" indexes; added name index to relation
-    db.version(2).stores({
+    db.version(25).stores({
         system: '&id, name',
         world: '&id, name, system',
         colony: '&id, name, world, system, relation',
