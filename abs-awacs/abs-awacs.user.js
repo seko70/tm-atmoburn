@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - AWACS
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.14.1
+// @version      0.14.2
 // @description  UI for abs-archivist - display nearest fleets, colonies, rally points in various contexts; uses data produced by abs-archivist
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
@@ -346,7 +346,7 @@ a.icon { text-decoration: none !important; }
 
     function _fillFrom(objType, icon, o) {
         const havePosition = o.x != null;
-        const [horiz, vert] = havePosition ? absElevations(refPoint, o) : [null, null];
+        const directions = havePosition ? absDirections(refPoint, o) : [null, null];
         return {
             id: o.id,
             sig: o.signature,
@@ -374,8 +374,8 @@ a.icon { text-decoration: none !important; }
             world: o.world,
             colony: o.colony,
             dist: havePosition ? Math.round((absDistance(refPoint, o)) / 10_000) / 100 : null,
-            horiz: havePosition ? `${horiz}'` : null,
-            vert: havePosition ? `${vert}º` : null,
+            horiz: havePosition ? `${directions.arrow} ${directions.clock}'` : null,
+            vert: havePosition ? `${directions.v}º` : null,
             ts: o.ts,
         };
     }
