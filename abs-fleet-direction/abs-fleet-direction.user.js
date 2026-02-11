@@ -8,8 +8,8 @@
 // @license        MIT
 // @match          https://*.atmoburn.com/fleet.php*
 // @match          https://*.atmoburn.com/fleet/*
-// @version        5.1.0
-// @require        https://github.com/seko70/tm-atmoburn/raw/refs/tags/commons/abs-utils/v1.2.0/commons/abs-utils.js
+// @version        5.1.1
+// @require        https://github.com/seko70/tm-atmoburn/raw/refs/tags/commons/abs-utils/v1.2.1/commons/abs-utils.js
 // @grant          none
 // ==/UserScript==
 

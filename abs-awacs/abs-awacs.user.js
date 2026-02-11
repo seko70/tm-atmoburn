@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - AWACS
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.14.0
+// @version      0.14.1
 // @description  UI for abs-archivist - display nearest fleets, colonies, rally points in various contexts; uses data produced by abs-archivist
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
@@ -12,7 +12,7 @@
 // @match        https://*.atmoburn.com/view_colony.php*
 // @run-at       document-end
 // @require      https://cdn.jsdelivr.net/npm/dexie@4.2.1/dist/dexie.min.js
-// @require      https://github.com/seko70/tm-atmoburn/raw/refs/tags/commons/abs-utils/v1.2.0/commons/abs-utils.js
+// @require      https://github.com/seko70/tm-atmoburn/raw/refs/tags/commons/abs-utils/v1.2.1/commons/abs-utils.js
 // @require      https://github.com/seko70/tm-atmoburn/raw/refs/tags/commons/atmoburn-service-db/v1.1.1/commons/atmoburn-service-db.js
 // @resource     TABULATOR_JS  https://unpkg.com/tabulator-tables@6.3.1/dist/js/tabulator.min.js
 // @resource     TABULATOR_CSS https://unpkg.com/tabulator-tables@6.3.1/dist/css/tabulator_site_dark.min.css
@@ -61,7 +61,7 @@
 
     // window style
     const ABS_WINDOW_STYLE = `
-html { font-family:Arial,sans-serif; background-color:${DARK2}; color:${MY_GRAY}; }    
+html { font-family:Arial,sans-serif; background-color:${DARK2}; color:${MY_GRAY}; }
 * { margin:0; padding:0; box-sizing:border-box; }
 a { color:inherit; }
 a.icon { text-decoration: none !important; }
@@ -702,7 +702,7 @@ a.icon { text-decoration: none !important; }
         e.innerHTML = `
 		<a href="#" class="hide_mobile hide_small menu_title" id="awacsMenuTitle">[AWACS]</a>
 		<div class="">
-			<ul> 
+			<ul>
 				<li><a id="awacsMyColsMenu" style="color:${REL_COLOR.m}">${ICON.Colony}&nbsp;My Colonies</a></li>
 				<li><a id="awacsAllColsMenu">${ICON.Colony}&nbsp;All Colonies</a></li>
 				<li><a id="awacsMyFleetsMenu" style="color:${REL_COLOR.m}">${ICON.Fleet}&nbsp;My Fleets</a></li>

@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Archivist
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.12.0
+// @version      0.12.1
 // @description  Parses and stores various entities while browsing AtmoBurn; see Tampermonkey menu for some actions; see abs-awacs for in-game UI
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
@@ -18,7 +18,7 @@
 // @match        https://*.atmoburn.com/sensor_net.php*
 // @run-at       document-end
 // @require      https://cdn.jsdelivr.net/npm/dexie@4.2.1/dist/dexie.min.js
-// @require      https://github.com/seko70/tm-atmoburn/raw/refs/tags/commons/abs-utils/v1.2.0/commons/abs-utils.js
+// @require      https://github.com/seko70/tm-atmoburn/raw/refs/tags/commons/abs-utils/v1.2.1/commons/abs-utils.js
 // @require      https://github.com/seko70/tm-atmoburn/raw/refs/tags/commons/atmoburn-service-db/v1.1.1/commons/atmoburn-service-db.js
 // @grant        GM_registerMenuCommand
 // @grant        GM_notification
@@ -624,9 +624,10 @@ const DEBUG = true;
     async function parseMyFleetsOverview() {
 
         async function _parseFleet(node, fleets) {
+            assert (node != null);
             const f = {
                 id: parseInt(node.href.match(/fleet=(\d+)/)[1]),
-                name: node.text.trim(),
+                name: useDefault(stripTags(Parsing.textContent(node))),
                 player: Parsing.parsePlayerName(),
                 relation: Relation.MY,
                 ts: now,

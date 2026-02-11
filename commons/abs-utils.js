@@ -1,9 +1,10 @@
-/* abs-utils - common utility functions without dependencies, shared by several scripts; version 1.2.0 */
+/* abs-utils - common utility functions without dependencies, shared by several scripts; version 1.2.1 */
 (function (global) {
     'use strict';
 
     global.absDirections = function (p1, p2) {
         const ARROWS = ["↑", "↗", "→", "↘", "↓", "↙", "←", "↖"];
+        const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
 
         // convert radians to degrees
         const rad2deg = function (angle) {
@@ -19,13 +20,13 @@
 
         // convert horizontal direction in degrees to compas direction (S,N,E,W,...)
         const compassFromDeg = function (deg) {
-            return (deg == null) ? '-' : ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.round(deg / 45) % 8];
+            return (deg == null) ? '-' : COMPASS[Math.round(deg / 45) % 8];
         }
 
         // convert horizontal direction in degrees to clock notation
         const clockFromDeg = function (deg) {
             if (deg == null) return '-';
-            const horiz = Math.round((deg - 90 + 180) / 360 * 12);
+            const horiz = Math.round(12 * deg / 360);
             return (horiz < 0) ? horiz + 12 : (horiz < 1) ? 12 : horiz;
         }
 
@@ -35,8 +36,8 @@
             const dx = p2.x - p1.x;
             const dy = p2.y - p1.y;
             if (dx === 0 && dy === 0) return null; // no direction
-            const deg = rad2deg(Math.atan2(dx, dy));
-            return Math.round(deg < 0 ? deg + 360 : deg);
+            const deg = rad2deg(Math.atan2(-dy, dx)) + 90;
+            return Math.abs(deg < 0 ? deg + 360 : deg);
         }
 
         // return vertical direction, in degrees (-90,90)
@@ -58,13 +59,8 @@
         }
 
         const h = horizontalDeg(p1, p2);
-        const v = verticalDeg(p1, p2);
         return {
-            h: h,
-            v: v,
-            clock: clockFromDeg(h),
-            compass: compassFromDeg(h),
-            arrow: arrowFromDeg(h)
+            h: h, v: verticalDeg(p1, p2), clock: clockFromDeg(h), compass: compassFromDeg(h), arrow: arrowFromDeg(h)
         }
     }
 
