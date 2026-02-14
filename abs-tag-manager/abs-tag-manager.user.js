@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Tag Manager
 // @namespace    sk.seko
 // @license      MIT
-// @version      2.0.3
+// @version      2.0.4
 // @description  Simple fleet/colony tagging script; use ALT-T for tagging current fleet/colony
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-tag-manager/abs-tag-manager.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-tag-manager/abs-tag-manager.user.js
@@ -503,11 +503,17 @@
             return (m && m[1]) ? Number(m[1]) : null;
         }
 
+        function escapeHtml(s) {
+            return String(s).replace(/[&<>"']/g, c => ({
+                "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+            }[c]));
+        }
+
         function getTagsFragment(tagList) {
             if (!tagList || !tagList.length) return "";
             const chips = [];
             for (const tag of tagList) {
-                chips.push(`&nbsp;<span style="color:${tag.color};white-space:nowrap;"><i class="fa-solid fa-tag"></i>${tag.name}</span>`);
+                chips.push(`&nbsp;<span style="color:${tag.color};white-space:nowrap;"><i class="fa-solid fa-tag"></i>${escapeHtml(tag.name)}</span>`);
             }
             return chips.join("");
         }
