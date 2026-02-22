@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Tag Manager
 // @namespace    sk.seko
 // @license      MIT
-// @version      2.0.4
+// @version      2.1.0
 // @description  Simple fleet/colony tagging script; use ALT-T for tagging current fleet/colony
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-tag-manager/abs-tag-manager.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-tag-manager/abs-tag-manager.user.js
@@ -22,6 +22,7 @@
     "use strict";
 
     const MAX_CHARS = 12;  // max tag length; just in case
+    const MAX_SUGGESTIONS = 10; // max number of suggestions
     const ZWSP = "\u200B"; // invisible, but harmless character; used to distinguish original label and tags, and to mark already decorated label
 
     const TAG_MANAGER_STYLE = `
@@ -182,6 +183,7 @@
       <button id="tm-tag-close" title="Close" aria-label="Close">×</button>
     </header>
     <main>
+      <div id="tm-tag-palette" class="tm-palette"></div>
       <div class="tm-row">
         <input id="tm-tag-name" class="tm-input"
                placeholder="tag name (max ${MAX_CHARS} chars); suggestions keep their color"
@@ -189,7 +191,6 @@
         <button id="tm-tag-add" class="tm-btn">Add</button>
       </div>
       <datalist id="tm-tag-suggestions"></datalist>
-      <div id="tm-tag-palette" class="tm-palette"></div>
       <div id="tm-tag-list"></div>
     </main>
     <footer>
@@ -324,7 +325,7 @@
             const pool = await buildSuggestionPool();
             const matches = pool
                 .filter(s => !p || s.startsWith(p))
-                .slice(0, MAX_CHARS);
+                .slice(0, MAX_SUGGESTIONS);
             dl.innerHTML = "";
             matches.forEach(s => {
                 dl.appendChild(el("option", {value: s}));
@@ -387,7 +388,7 @@
                 });
             }
 
-            addBtn.addEventListener("click", async () => {
+            async function add() {
                 const tagName = (nameIn.value || "").trim().slice(0, MAX_CHARS);
                 if (!tagName) return;
                 await addTagToObject(state.objectType, state.objectId, state.tags, {name: tagName, color: state.currentColor});
@@ -395,7 +396,9 @@
                 nameIn.value = "";
                 await updateDatalist("");
                 render();
-            });
+            }
+
+            addBtn.addEventListener("click", add);
 
             clearBtn.addEventListener("click", async () => {
                 if (!state.tags || !state.tags.length) return;
@@ -410,8 +413,11 @@
                 if (e.key === "Enter") addBtn.click();
                 if (e.key === "Escape") close();
             });
-
-            [doneBtn, closeBtn].forEach(b => b.addEventListener("click", close));
+            doneBtn.addEventListener("click", async () => {
+                await add();
+                close();
+            });
+            closeBtn.addEventListener("click", close);
             backdrop.addEventListener("mousedown", e => {
                 if (e.target === backdrop) close();
             });
