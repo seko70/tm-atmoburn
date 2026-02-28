@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Tag Manager
 // @namespace    sk.seko
 // @license      MIT
-// @version      2.1.0
+// @version      2.2.0
 // @description  Simple fleet/colony tagging script; use ALT-T for tagging current fleet/colony
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-tag-manager/abs-tag-manager.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-tag-manager/abs-tag-manager.user.js
@@ -36,7 +36,7 @@
         font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
     }
     #tm-tag-modal {
-        width: min(520px, calc(100vw - 24px));
+        width: min(480px, calc(100vw - 24px));
         margin: 7vh auto 0 auto;
         background: #111827;
         color: #e5e7eb;
@@ -185,7 +185,7 @@
     <main>
       <div id="tm-tag-palette" class="tm-palette"></div>
       <div class="tm-row">
-        <input id="tm-tag-name" class="tm-input"
+        <input id="tm-tag-name" class="tm-input" autocomplete="new-password" spellcheck="false"
                placeholder="tag name (max ${MAX_CHARS} chars); suggestions keep their color"
                maxlength="${MAX_CHARS}" list="tm-tag-suggestions" />
         <button id="tm-tag-add" class="tm-btn">Add</button>
@@ -319,17 +319,19 @@
         }
 
         async function updateDatalist(prefix) {
+            const input = document.getElementById("tm-tag-name");
             const dl = document.getElementById("tm-tag-suggestions");
-            if (!dl) return;
+            if (!input || !dl) return;
             const p = String(prefix || "");
             const pool = await buildSuggestionPool();
             const matches = pool
                 .filter(s => !p || s.startsWith(p))
                 .slice(0, MAX_SUGGESTIONS);
-            dl.innerHTML = "";
-            matches.forEach(s => {
-                dl.appendChild(el("option", {value: s}));
-            });
+            dl.replaceChildren(...matches.map(s => el("option", {value: s})));
+            // hard refresh datalist binding (works around browser caching)
+            const listId = dl.id;
+            input.removeAttribute("list");
+            setTimeout(() => input.setAttribute("list", listId), 50);
         }
 
         function ensureModal() {
@@ -657,7 +659,7 @@
                     addTagManagerListener("colony", objectId);
                     if (colonyTags) decorateColonyScreen(objectId, colonyTags.get(objectId));
                 }
-            } else if (urlstr.match(/atmoburn\.com\/fleet\.php/i) || urlstr.match(/atmoburn\.com\/fleet\//i)) {
+            } else if (urlstr.match(/atmoburn\.com\/fleet(?:\.php|\/|_cargo_orders\.php)/i)) {
                 const objectId = parseIdFromURL(FLEET_ID_RE);
                 if (objectId) {
                     addTagManagerListener("fleet", objectId);
