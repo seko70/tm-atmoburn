@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Archivist
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.14.0
+// @version      0.14.1
 // @description  Parses and stores various entities while browsing AtmoBurn; see Tampermonkey menu for some actions; see abs-awacs for in-game UI
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
@@ -803,7 +803,6 @@ const DEBUG = true;
                 const flink = r2cols[0].querySelector(':scope > a[href^="/fleet.php?"]');
                 Parsing.parseInfoFromLink(flink, /tfleet=(\d+)/, f, 'id', 'name');
                 f.faction = Parsing.textContent(r2cols[1]);
-                //f.location = Parsing.textContent(r2cols[2]);
                 const loclink = last(r2cols[2].querySelectorAll("span.fakeLink"));
                 Parsing.parseFleetLocationFromLink(f, loclink, scanner);
                 f.speed = Parsing.textContent(r2cols[4]);
@@ -815,7 +814,7 @@ const DEBUG = true;
                 f.tonnage = Parsing.textContent(r3cols[4]);
                 // fourth row
                 const r4cols = Array.from(row4?.querySelectorAll(':scope > td'));
-                f.roster = Array.from(r4cols[0].querySelectorAll('div'))?.map(x => Parsing.textContent(x.textContent)).join(',');
+                f.roster = Array.from(r4cols[0].querySelectorAll('div'))?.map(x => Parsing.textContent(x)).join(', ');
                 // add to fleets
                 if (f.id && f.name) {
                     await enrichFleetLocation(f);
