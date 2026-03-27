@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Archivist
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.12.1
+// @version      0.14.0
 // @description  Parses and stores various entities while browsing AtmoBurn; see Tampermonkey menu for some actions; see abs-awacs for in-game UI
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
@@ -48,7 +48,7 @@ const DEBUG = true;
         colony: ['id', 'name', 'x', 'y', 'z', 'world', 'system', 'player', 'faction', 'relation', 'population', 'size', 'ts', 'src'],
         fleet: ['id', 'name', 'x', 'y', 'z', 'system', 'world', 'colony', 'player', 'faction', 'relation', 'signature', 'location', 'speed', 'ships', 'tonnage', 'roster', 'ts', 'src'],
         rp: ['id', 'name', 'x', 'y', 'z', 'relation', 'type', 'comment', 'ts', 'src'],
-        wh: ['id', 'name', 'system', 'x', 'y', 'z', 'tsystem', 'tx', 'ty', 'tz', 'ts', 'src'],
+        wh: ['id', 'name', 'system', 'x', 'y', 'z', 'tsystem', 'tx', 'ty', 'tz', 'comment', 'ts', 'src'],
         signature: ['id', 'name', 'x', 'y', 'z', 'system', 'world', 'colony', 'player', 'faction', 'relation', 'location', 'speed', 'ships', 'tonnage', 'roster', 'ts', 'src'],
         relation: ['id', 'relation', 'ts', 'src'],
     };
@@ -222,9 +222,7 @@ const DEBUG = true;
 
     async function bulkSave(type, items) { // same as 'save', but for array of objects
         const tbl = db.table(type);
-        const sanitized = items.map((data, idx) => {
-            return sanitize(type, data);
-        });
+        const sanitized = items.map(data => sanitize(type, data));
         await tbl.bulkPut(sanitized);
         xdebug(`Objects "${type}" bulk-saved (${sanitized.length})`, sanitized);
         return sanitized.length;
@@ -411,6 +409,7 @@ const DEBUG = true;
             colony.size = safeFloat(Parsing.getTextAfterPrefix(colonydropdown, 'Size:'));
             return colony;
         },
+
         // Parse colony list form "Colonies" menu; returns list of {id,name,style}
         parseColonyList: function () {
             const colonylist = byId("colonylist");
@@ -428,6 +427,7 @@ const DEBUG = true;
             xdebug("Colony list parsed OK", colonies);
             return colonies;
         },
+
         // Parse fleet list form "Fleets" menu; returns list of {id,name,style}
         parseFleetList: function () {
             const fleetlist = byId("fleetlist");
@@ -554,6 +554,7 @@ const DEBUG = true;
             if (typeof f.speed != 'number') f.speed = safeInteger(f.speed);
             if (typeof f.ships != 'number') f.ships = safeInteger(f.ships);
             if (typeof f.tonnage != 'number') f.tonnage = safeFloat(f.tonnage);
+            if (!f.roster || !f.roster.length || f.roster === '""') f.roster = null;
             Parsing.fixUndefined(f);
         },
         sanitizeSignature: function (s) {
@@ -579,7 +580,7 @@ const DEBUG = true;
 
     // --- Parsers -----------------------------------------------------------------
 
-    async function parseKnownUniverse() {
+    async function parseWormholes() {
 
         async function _parseWormhole(row, wormholes) {
             const divs = row.querySelectorAll(':scope > div');
@@ -590,17 +591,18 @@ const DEBUG = true;
             const wh = {ts: now, src: 'ku'};
             wh.name = useDefault(Parsing.textContent(divs[0]));
             // parse wormhole system
-            Parsing.parseSystemInfoFromLink(divs[1], wh, 'system', null);
+            Parsing.parseSystemInfoFromLink(divs[1], wh, 'system', 'location');
             assert(wh.system);
             const fromSystem = await fetchSystemInfo(wh.system);
             [wh.x, wh.y, wh.z] = [fromSystem.x, fromSystem.y, fromSystem.z];
             // parse wormhole target system
-            Parsing.parseSystemInfoFromLink(divs[targetSystemColumnNumber], wh, 'tsystem', null);
+            Parsing.parseSystemInfoFromLink(divs[targetSystemColumnNumber], wh, 'tsystem', 'tlocation');
             assert(wh.tsystem);
             const toSystem = await fetchSystemInfo(wh.tsystem);
             [wh.tx, wh.ty, wh.tz] = [toSystem.x, toSystem.y, toSystem.z];
             // generate wormhole ID
             wh.id = `#${Parsing.makeIdFromString(wh.name.replace('Wormhole ', ''))}.${wh.system}`;
+            wh.comment = `${wh.location} → ${wh.tlocation}`;
             wormholes.push(wh);
         }
 
@@ -624,7 +626,7 @@ const DEBUG = true;
     async function parseMyFleetsOverview() {
 
         async function _parseFleet(node, fleets) {
-            assert (node != null);
+            assert(node != null);
             const f = {
                 id: parseInt(node.href.match(/fleet=(\d+)/)[1]),
                 name: useDefault(stripTags(Parsing.textContent(node))),
@@ -703,7 +705,7 @@ const DEBUG = true;
         // sanitize fleet data
         Parsing.sanitizeFleet(fleet);
         // save fleet info (create or update)
-        await save('fleet', fleet);
+        await update('fleet', fleet);
         xlog("Updated fleet", fleet);
         // cache colony, world and system coordinates - eventually
         if (fleet.colony) {
@@ -740,6 +742,7 @@ const DEBUG = true;
             const myColonies = PureParser.parseColonyList();
             const deleted = await deleteMyMissingColonies(myColonies);
             if (deleted) xlog(`Deleted my missing colonies: ${deleted}`);
+            await bulkUpdate('colony', myColonies);
         } catch (err) {
             notify('Error while parsing/processing side colony list', err);
         }
@@ -1087,7 +1090,7 @@ const DEBUG = true;
                 setTimeout(safeAsync(parseSideLists), 600);
             } else if (urlstr.match(/atmoburn\.com\/known_universe\.php/i)) {
                 xlog(`Known Universe: ${urlstr}`);
-                setTimeout(safeAsync(parseKnownUniverse), 200);
+                setTimeout(safeAsync(parseWormholes), 200);
             } else if (urlstr.match(/atmoburn\.com\/extras\/scan.php/i)) {
                 xlog(`Scan: ${urlstr}`);
                 setTimeout(safeAsync(parseScan), 500);
