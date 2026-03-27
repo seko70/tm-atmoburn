@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - AWACS
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.14.2
+// @version      0.15.0
 // @description  UI for abs-archivist - display nearest fleets, colonies, rally points in various contexts; uses data produced by abs-archivist
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
@@ -344,6 +344,14 @@ a.icon { text-decoration: none !important; }
         return null;
     }
 
+    function _concatStrings(s1, s2, s3) {
+        return [s1, s2, s3].filter(s => s != null && s !== '').join(', ') || null;
+    }
+
+    function _getSubtype(objType, obj) {
+        return objType === Type.RP ? `(${RP_SUBTYPES[obj.type] ?? "?"})` : null;
+    }
+
     function _fillFrom(objType, icon, o) {
         const havePosition = o.x != null;
         const directions = havePosition ? absDirections(refPoint, o) : [null, null];
@@ -352,9 +360,8 @@ a.icon { text-decoration: none !important; }
             sig: o.signature,
             icon: icon,
             type: objType,
-            subtype: o.type,
             name: o.name,
-            comment: o.comment,
+            comment: _concatStrings(o.comment, o.location, _getSubtype(objType, o)),
             navigate: _computeNavigateLink(objType, o),
             launch: _computeLaunchLink(objType, o),
             player: o.player,
@@ -366,7 +373,6 @@ a.icon { text-decoration: none !important; }
             pop: o.population,
             size: o.size,
             position: havePosition ? `${o.x},${o.y},${o.z}` : null,
-            location: o.location,
             x: o.x,
             y: o.y,
             z: o.z,
@@ -501,9 +507,6 @@ a.icon { text-decoration: none !important; }
         NAME: function (cell, _formatterParams, _onRendered) {
             const r = cell.getRow().getData();
             let name = `${cell.getValue()}`;
-            if (r.type === Type.RP) {
-                name += `<small> - (${RP_SUBTYPES[r.subtype] ?? "?"}) ${r.comment ? r.comment : ""}</small>`;
-            }
             if (r.launch && refPoint && refPoint.fid) {
                 const tooltip = `Launch '${refPoint.name}' toward '${r.name}'`;
                 return `${r.icon} <a href="${r.launch}" target="maingame" title="${tooltip}">${name}</a>`;
@@ -563,7 +566,6 @@ a.icon { text-decoration: none !important; }
         const HTT = {
             ID: "Identifier of the colony/fleet/rally point/wormhole etc",
             SIG: "Signature of the fleet",
-            TYPE: "Record type - and subtype, if exists, like (L)ocation, (C)olony, (F)leet, (W)ormhole, (T)arget",
             REL: "Player relation; (m)e,(f)riend,(n)eutral,(e)nemy",
             ACT: "Action buttons",
             DIST: `Distance from ${refPoint.name}, in mkm`,
@@ -578,10 +580,10 @@ a.icon { text-decoration: none !important; }
         // setup columns
         const columns = [
             {title: "#", formatter: "rownum", width: 40, hozAlign: "center", headerSort: false},
-            // {title: "T", field: "type", width: 50, formatter: FMT.TYPE, headerTooltip: HTT.TYPE},
             {title: "ID", field: "id", headerFilter: true, width: 60, headerTooltip: HTT.ID},
             {title: "Sig", field: "sig", headerFilter: true, width: 60, headerTooltip: HTT.SIG},
             {title: "Name", field: "name", headerFilter: true, minWidth: 130, formatter: FMT.NAME, tooltip: TT.NAME},
+            {title: "Detail", field: "comment", headerFilter: true, minWidth: 70},
             {title: "", field: "navigate", minWidth: 20, width: 25, headerSort: false, formatter: FMT.NAV, headerTooltip: HTT.ACT},
             {title: "", field: "launch", minWidth: 20, width: 25, headerSort: false, formatter: FMT.LNC, headerTooltip: HTT.ACT},
             {title: "Player", field: "player", headerFilter: true, minWidth: 70, formatter: FMT.REF_COLOR_FG},
