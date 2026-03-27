@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Tag Manager
 // @namespace    sk.seko
 // @license      MIT
-// @version      2.2.0
+// @version      2.3.0
 // @description  Simple fleet/colony tagging script; use ALT-T for tagging current fleet/colony
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-tag-manager/abs-tag-manager.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-tag-manager/abs-tag-manager.user.js
@@ -10,9 +10,6 @@
 // @match        https://*.atmoburn.com/*
 // @exclude    	 https://*.atmoburn.com/extras/view_universe.php*
 // @require      https://cdn.jsdelivr.net/npm/dexie@4.2.1/dist/dexie.min.js
-// @grant        GM_getValue
-// @grant        GM_setValue
-// @grant        GM_deleteValue
 // ==/UserScript==
 
 /* jshint esversion: 11 */
@@ -220,7 +217,11 @@
         }
 
         static async deleteRecord(objectType, id) {
-            return await db.table(objectType).delete(id);
+            return db.table(objectType).delete(id);
+        }
+
+        static async deleteRecords(objectType, idList) {
+            return db.table(objectType).bulkDelete(idList);
         }
 
         // returns object/map: {"1093: [{"name": "OOF","color": "#ff0000"},...], ...}
@@ -448,57 +449,7 @@
             if (state.onclose) setTimeout(state.onclose, 100);
         }
 
-        /*
-         * This is temporaru function for migration of pre-v2.0 data (GM_setValue) to 2.x data (IndexedDB); will be removed in v2.5+
-         */
-        async function oneTimeMigration() {
-            function gmNsKey(baseKey) {
-                return `${location.host}::${baseKey}`;
-            }
-
-            function typedKey(objType, baseKey) {
-                return `${objType}:${baseKey}`;
-            }
-
-            function gmGet(objType, baseKey, defaultValue) {
-                return GM_getValue(gmNsKey(typedKey(objType, baseKey)), defaultValue);
-            }
-
-            async function migrateOnce(objectType) {
-                // get all legacy data
-                const tagsById = gmGet(objectType, "tagsById", {});
-                const allTags = gmGet(objectType, "allTags", {});
-                // transaction for safe migration
-                await db.transaction('rw', db.table(objectType), async () => {
-                    const migrationPromises = Object.entries(allTags).map(async ([entityId, tagIds]) => {
-                        const tags = tagIds.map(tagId => {
-                            const tagInfo = tagsById[tagId];
-                            return tagInfo ? {name: tagInfo.name, color: tagInfo.color} : null;
-                        }).filter(Boolean);
-                        await db.table(objectType).put({id: Number(entityId), tagList: tags});
-                    });
-                    await Promise.all(migrationPromises);
-                });
-                // after successfull migration delete legacy data
-                GM_deleteValue(gmNsKey(typedKey(objectType, "tagsById")));
-                GM_deleteValue(gmNsKey(typedKey(objectType, "allTags")));
-                GM_deleteValue(gmNsKey(typedKey(objectType, "tagIndexByName")));
-                GM_deleteValue(gmNsKey(typedKey("t", "__seq__")));
-            }
-
-            for (const objectType of ["colony", "fleet"]) {
-                try {
-                    if (gmGet(objectType, "allTags", null) === null) continue; // already migrated
-                    console.info(`TM: Trying to migrate '${objectType}' ...`);
-                    await migrateOnce(objectType);
-                    console.info(`TM: Migration of '${objectType}' finished OK`);
-                } catch (e) {
-                    console.error(`TM: Migration of '${objectType}' failed`, e);
-                }
-            }
-        }
-
-        return {open, oneTimeMigration};
+        return {open};
     })();
 
     (async () => {
@@ -566,24 +517,40 @@
         }
 
         function _decorateObjectList(allTags, nodeSelector) {
+            const objectsDecorated = [];
             for (const [objectId, tags] of allTags) {
                 if (!objectId || !tags) return;
                 nodeSelector(objectId).forEach((node) => {
                     try {
                         decorateOneLink(node, tags);
+                        objectsDecorated.push(objectId);
                     } catch (e) {
                         console.error(`TM: Can't decorate ${objectId}: ${e.message}`, e);
                     }
                 });
             }
+            return objectsDecorated;
         }
 
-        function decorateColonySideList(allTags) {
+        function removeUnusedTags(tags, type, usedIds) {
+            if (!usedIds || !usedIds.length) return; // just in case: do not remove anything, if no ID was used (may be error...)
+            const usedIdsSet = new Set(usedIds);
+            const idsToRemove = [...tags.keys()].filter(id => !usedIdsSet.has(id));
+            if (idsToRemove && idsToRemove.length > 0) {
+                console.info(`Removing tags for nonexisting objects of type '${type}':`, idsToRemove);
+                TagDB.deleteRecords(type, idsToRemove);
+            }
+        }
+
+        function decorateColonySideList(colonyTags, removeUnused = false) {
             const colonyList = document.getElementById('colonylist');
             if (!colonyList) return;
-            _decorateObjectList(allTags, (objectId) => {
+            let decoratedColonies = _decorateObjectList(colonyTags, (objectId) => {
                 return colonyList.querySelectorAll(`a[href$="/view_colony.php?colony=${objectId}"]`);
             });
+            if (removeUnused && decoratedColonies && decoratedColonies.length > 0) { // just in case: do not remove anything, if no decorations happened
+                removeUnusedTags(colonyTags, "colony", decoratedColonies);
+            }
         }
 
         function decorateOverviewColonies(colonyTags) {
@@ -594,15 +561,18 @@
             });
         }
 
-        function decorateFleetSideList(fleetTags) {
+        function decorateFleetSideList(fleetTags, removeUnused = false) {
             const fleetList = document.getElementById('fleetlist');
             if (!fleetList) return;
-            _decorateObjectList(fleetTags, (objectId) => {
+            let decoratedFleets = _decorateObjectList(fleetTags, (objectId) => {
                 return fleetList.querySelectorAll(`a[href$="/fleet.php?fleet=${objectId}"]`)
             });
+            if (removeUnused && decoratedFleets && decoratedFleets.length > 0) { // just in case: do not remove anything, if no decorations happened
+                removeUnusedTags(fleetTags, "fleet", decoratedFleets);
+            }
         }
 
-        function decorateOverviewFleets(allTags, tagsById) {
+        function decorateOverviewFleets(allTags) {
             const fleetList = document.getElementById('fleetSort');
             if (!fleetList) return;
             _decorateObjectList(allTags, (objectId) => {
@@ -646,9 +616,6 @@
             console.error("TM: decorateSome - unknown objectType:", objectType);
         }
 
-        // FIXME
-        await TagManagerUI.oneTimeMigration();
-
         try {
             const urlstr = document.URL;
             const colonyTags = await TagDB.getAllRecordsMap("colony")
@@ -670,8 +637,8 @@
             } else if (urlstr.match(/atmoburn\.com\/overview.php\?view=2/i)) {
                 decorateOverviewFleets(fleetTags);
             }
-            decorateColonySideList(colonyTags);
-            decorateFleetSideList(fleetTags);
+            decorateColonySideList(colonyTags, true);
+            decorateFleetSideList(fleetTags, true);
         } catch (e) {
             console.error('TM: error', e);
         }
