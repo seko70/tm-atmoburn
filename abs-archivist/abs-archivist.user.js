@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Archivist
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.14.1
+// @version      0.15.0
 // @description  Parses and stores various entities while browsing AtmoBurn; see Tampermonkey menu for some actions; see abs-awacs for in-game UI
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
@@ -186,7 +186,7 @@ const DEBUG = true;
         return true;
     }
 
-    async function update(type, data) { // same as 'create', but updates data if data.id already exists
+    async function update(type, data, bulk=false) { // same as 'create', but updates data if data.id already exists
         const tbl = db.table(type);
         const obj = sanitize(type, data);
         const exists = await tbl.get(obj.id);
@@ -199,7 +199,7 @@ const DEBUG = true;
         } else {
             await tbl.put(obj);
         }
-        xdebug(`Object "${type}" updated`, obj);
+        if (!bulk) xdebug(`Object "${type}" updated`, obj);
         return true;
     }
 
@@ -207,8 +207,9 @@ const DEBUG = true;
         let count = 0;
         // FIXME this is not optimal, but for now ...
         for (const item of items) {
-            if (await update(type, item)) count += 1;
+            if (await update(type, item, true)) count += 1;
         }
+        xdebug(`Objects "${type}" bulk-updated`, items);
         return count;
     }
 
@@ -372,6 +373,51 @@ const DEBUG = true;
         return w;
     }
 
+    // async job to clean old/expired/dead fleets, signatures and duplicates in general; heuristic is used, be warned!
+    async function fleetCleanup() {
+        const now = new Date();
+        const RESERVE_MS = 3 * 60 * 1000;
+        const DEBUG_NAME="Galileo VIII";
+
+        async function _processSignature(sig, now) {
+            const DEBUG = sig.name === DEBUG_NAME;
+            // 1. check for fleets with same signature
+            let matchingFleet = await db.fleet.where('signature').equals(sig.id).first();
+            if (DEBUG) console.debug("_processSignature1:", sig, matchingFleet)
+            if (matchingFleet) {
+                // TODO update fleet if signature has newer info
+                console.debug("Signature can be deleted - same signature fleet(s) found", sig, matchingFleet)
+                return true; // we don't need this signature anymore - there are fleet recorded
+            }
+            // 2. check for fleets with same name/position/player and with the same update time (approx)
+            matchingFleet = await db.fleet.where('name').equals(sig.name).filter(
+                f => f.player === sig.player && f.x === sig.x && f.y === sig.y && f.z === sig.z && Math.abs(f.ts - sig.ts) < RESERVE_MS
+            ).first();
+            if (DEBUG) console.debug("_processSignature1:", sig, matchingFleet)
+            if (matchingFleet) {
+                // TODO update fleet if signature has newer info
+                console.debug("Signature can be deleted - matchnich fleet(s) found", sig, matchingFleet)
+                return true; // we don't need this signature anymore - there are fleet recorded
+            }
+            return false;
+        }
+
+        console.info("fleetCleanup started");
+        // phase 1 - readonly scan, collecting IDs for delete
+        const idsToDelete = [];
+        const allSignatures = await db.signature.toArray();
+        for (const sig of allSignatures) {
+            const shouldDelete = await _processSignature(sig, now);
+            if (shouldDelete) {
+                idsToDelete.push(sig.id);
+            }
+        }
+        // phase 2 - delete expired/duplicate signatures
+        if (idsToDelete.length > 0) {
+            await db.signature.bulkDelete(idsToDelete);
+        }
+        console.info("fleetCleanup completed, deleted signatures: " + idsToDelete.length);
+    }
 
     // === Parser ====
 
@@ -416,7 +462,7 @@ const DEBUG = true;
             if (!colonylist) return null;
             const colonies = [];
             colonylist.querySelectorAll('a[href*="/view_colony.php?colony="]')?.forEach((node) => {
-                const c = {};
+                const c = {src: 'cl'};
                 const parsedOK = Parsing.parseColonyInfoFromLink(node, c, 'id', 'name');
                 assert(parsedOK, `Can't parse colony id/name from colony list node ${node?.outerHTML}`);
                 c.name = useDefault(stripTags(c.name));
@@ -434,7 +480,7 @@ const DEBUG = true;
             if (!fleetlist) return null;
             const fleets = [];
             fleetlist.querySelectorAll('a[href*="/fleet.php?fleet="]')?.forEach((node) => {
-                const f = {};
+                const f = {src: 'fl'};
                 const parsedOK = Parsing.parseFleetInfoFromLink(node, f, 'id', 'name');
                 assert(parsedOK, `Can't parse fleet id/name from colony list node ${node?.outerHTML}`);
                 f.name = useDefault(stripTags(f.name));
@@ -1079,6 +1125,7 @@ const DEBUG = true;
             if (urlstr.match(/atmoburn\.com\/overview\.php\?view=2/i)) {
                 xlog(`Fleet Overview: ${urlstr}`);
                 setTimeout(safeAsync(parseMyFleetsOverview), 100);
+                setTimeout(safeAsync(fleetCleanup), 1000);
             } else if (urlstr.match(/atmoburn\.com\/fleet\.php/i) || urlstr.match(/atmoburn\.com\/fleet\//i)) {
                 xlog(`Fleet: ${urlstr}`);
                 setTimeout(safeAsync(parseFleetScreen), 500);
