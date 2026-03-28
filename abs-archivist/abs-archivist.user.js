@@ -209,7 +209,7 @@ const DEBUG = true;
         for (const item of items) {
             if (await update(type, item, true)) count += 1;
         }
-        xdebug(`Objects "${type}" bulk-updated`, items);
+        xdebug(`Objects "${type}" bulk-updated`, count);
         return count;
     }
 
@@ -225,7 +225,7 @@ const DEBUG = true;
         const tbl = db.table(type);
         const sanitized = items.map(data => sanitize(type, data));
         await tbl.bulkPut(sanitized);
-        xdebug(`Objects "${type}" bulk-saved (${sanitized.length})`, sanitized);
+        xdebug(`Objects "${type}" bulk-saved`, sanitized.length);
         return sanitized.length;
     }
 
