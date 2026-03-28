@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - AWACS
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.15.0
+// @version      0.15.2
 // @description  UI for abs-archivist - display nearest fleets, colonies, rally points in various contexts; uses data produced by abs-archivist
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
@@ -397,7 +397,7 @@ a.icon { text-decoration: none !important; }
             data.push(_fillFrom(Type.Fleet, ICON.Fleet, f));
         });
         await db.signature.each(s => {
-            data.push(_fillFrom(Type.Fleet, ICON.RP, {...s, id: null, signature: s.id}));
+            data.push(_fillFrom(Type.Fleet, ICON.Fleet, {...s, id: null, signature: s.id}));
         });
     }
 
@@ -430,9 +430,9 @@ a.icon { text-decoration: none !important; }
     function getTimeColor(totalMinutes) {
         const absMinutes = Math.abs(totalMinutes);
         if (absMinutes <= 30) return MY_GREEN;
-        if (absMinutes <= 180) return MY_GRAY;
-        if (absMinutes <= 1440) return MY_ORANGE;
-        if (absMinutes <= 7 * 1440) return MY_RED;
+        if (absMinutes <= 3 * 60) return MY_GRAY;
+        if (absMinutes <= 24 * 60) return MY_ORANGE;
+        if (absMinutes <= 7 * 24 * 60) return MY_RED;
         return "black";
     }
 
@@ -444,7 +444,6 @@ a.icon { text-decoration: none !important; }
     const _u = function (label, value) {
         return `${label}: <b>${value ?? "?"}</b>`
     }
-
 
     // Field tooltips
     const TT = {
