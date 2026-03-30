@@ -10,6 +10,7 @@ Parses and highlights best/worst/most effective blueprints (per attribute), like
 - least effective  (👎)
 - highlights hybrids (to not miss important/interesting blueprints)
 - highlights no-res blueprints (detto)
+- attribute values are colored light green (best), dark green (good), yellow (so-so), dark red (bad), no-color (worst)
 - etc - see screenshot
 
 See tooltips for attribute values / badges - for more details.

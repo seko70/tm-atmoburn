@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Blueprints Colorizer
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.9.0
+// @version      0.10.0
 // @description  Parses and highlights best/worst/most effective blueprints (per attribute)
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-blueprint-colorizer/abs-blueprint-colorizer.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-blueprint-colorizer/abs-blueprint-colorizer.user.js
@@ -51,6 +51,7 @@
             LAYOUT: {n: 'layout'},
             ENGINES: {n: 'engines'},
             MASS: {n: 'mass', r: true},
+            MPE: {n: 'mass-per-engine', r: true},
             POWER: {n: 'power'},
             ENDURANCE: {n: 'endurance'},
             POWERPM: {n: 'power-per-mass'},
@@ -75,7 +76,6 @@
             TCPM: {n: 'transport-capacity-per-mass', c: true},
             CCPM: {n: 'colonists-capacity-per-mass', c: true},
             LPM: {n: 'layout-per-mass', c: true},
-            MPE: {n: 'mass-per-engine', r: true, c: true},
             EPM: {n: 'endurance-per-mass', c: true},
             PDPS: {n: 'primary-damage-per-second', c: true},
             SDPS: {n: 'support-damage-per-second', c: true},
@@ -298,7 +298,7 @@
             const mpe = computedAttribute(ATTR.MPE, mass, safeRatio2(mass, engines));
             const nores = isNoRes(resourcePromptElements);
             const hybrid = isHybrid(bpTypeElement);
-            return {guns, transport, colonists, scanner, layout, engines, mass, price, ppg, tcpm, ccpm, lpm, mpe, nores, hybrid}
+            return {guns, transport, colonists, scanner, layout, engines, price, ppg, tcpm, ccpm, lpm, mpe, nores, hybrid}
         }
 
         function parseWeaponBlueprint(row) {
