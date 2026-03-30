@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Blueprints Colorizer
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.10.0
+// @version      0.11.0
 // @description  Parses and highlights best/worst/most effective blueprints (per attribute)
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-blueprint-colorizer/abs-blueprint-colorizer.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-blueprint-colorizer/abs-blueprint-colorizer.user.js
@@ -73,6 +73,8 @@
             // computed attributes
             CPQ: {n: 'cost-per-worker-and-quality', r: true, c: true},
             PPG: {n: 'price-per-gun', r: true, c: true},
+            SPM: {n: 'scanner-per-mass', c:true},
+            GPM: {n: 'guns-per-mass', c:true},
             TCPM: {n: 'transport-capacity-per-mass', c: true},
             CCPM: {n: 'colonists-capacity-per-mass', c: true},
             LPM: {n: 'layout-per-mass', c: true},
@@ -292,13 +294,15 @@
             const mass = parseBlueprintAttribute(ATTR.MASS, promptElements, "Hull Mass:");
             const price = parseResourceTableAttribute(ATTR.PRICE, resourcePromptElements);
             const ppg = computedAttribute(ATTR.PPG, guns, safeRatio2(price, guns));
+            const gpm = computedAttribute(ATTR.GPM, guns, safeRatio2(guns, mass, 1000));
+            const spm = computedAttribute(ATTR.SPM, scanner, safeRatio2(scanner, mass, 1000));
             const tcpm = computedAttribute(ATTR.TCPM, transport, safeRatio2(transport, mass));
             const ccpm = computedAttribute(ATTR.CCPM, colonists, safeRatio2(colonists, mass));
             const lpm = computedAttribute(ATTR.LPM, layout, safeRatio2(layout, mass));
             const mpe = computedAttribute(ATTR.MPE, mass, safeRatio2(mass, engines));
             const nores = isNoRes(resourcePromptElements);
             const hybrid = isHybrid(bpTypeElement);
-            return {guns, transport, colonists, scanner, layout, engines, price, ppg, tcpm, ccpm, lpm, mpe, nores, hybrid}
+            return {guns, transport, colonists, scanner, layout, engines, price, ppg, gpm, spm, tcpm, ccpm, lpm, mpe, nores, hybrid}
         }
 
         function parseWeaponBlueprint(row) {
