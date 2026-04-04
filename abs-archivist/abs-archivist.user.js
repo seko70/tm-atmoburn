@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Archivist
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.15.0
+// @version      0.15.1
 // @description  Parses and stores various entities while browsing AtmoBurn; see Tampermonkey menu for some actions; see abs-awacs for in-game UI
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
@@ -31,10 +31,11 @@
 // @ts-check
 // <reference types="dexie" />
 
-const DEBUG = true;
 
 (function () {
     'use strict';
+
+    const DEBUG = true;
 
     // refpoint; exported for use in other scripts as well
     unsafeWindow.refPoint = {x: 0, y: 0, z: 0, name: "Center-of-the-Universe"};
@@ -186,7 +187,7 @@ const DEBUG = true;
         return true;
     }
 
-    async function update(type, data, bulk=false) { // same as 'create', but updates data if data.id already exists
+    async function update(type, data, bulk = false) { // same as 'create', but updates data if data.id already exists
         const tbl = db.table(type);
         const obj = sanitize(type, data);
         const exists = await tbl.get(obj.id);
@@ -377,26 +378,22 @@ const DEBUG = true;
     async function fleetCleanup() {
         const now = new Date();
         const RESERVE_MS = 3 * 60 * 1000;
-        const DEBUG_NAME="Galileo VIII";
 
         async function _processSignature(sig, now) {
-            const DEBUG = sig.name === DEBUG_NAME;
             // 1. check for fleets with same signature
             let matchingFleet = await db.fleet.where('signature').equals(sig.id).first();
-            if (DEBUG) console.debug("_processSignature1:", sig, matchingFleet)
             if (matchingFleet) {
                 // TODO update fleet if signature has newer info
-                console.debug("Signature can be deleted - same signature fleet(s) found", sig, matchingFleet)
+                xdebug("Signature can be deleted - same signature fleet(s) found", sig, matchingFleet)
                 return true; // we don't need this signature anymore - there are fleet recorded
             }
             // 2. check for fleets with same name/position/player and with the same update time (approx)
             matchingFleet = await db.fleet.where('name').equals(sig.name).filter(
                 f => f.player === sig.player && f.x === sig.x && f.y === sig.y && f.z === sig.z && Math.abs(f.ts - sig.ts) < RESERVE_MS
             ).first();
-            if (DEBUG) console.debug("_processSignature1:", sig, matchingFleet)
             if (matchingFleet) {
                 // TODO update fleet if signature has newer info
-                console.debug("Signature can be deleted - matchnich fleet(s) found", sig, matchingFleet)
+                xdebug("Signature can be deleted - matchnich fleet(s) found", sig, matchingFleet)
                 return true; // we don't need this signature anymore - there are fleet recorded
             }
             return false;
@@ -470,7 +467,7 @@ const DEBUG = true;
                 colonies.push(c);
             });
             assert(colonies.length > 0, "No colonies in colony list?");
-            xdebug("Colony list parsed OK", colonies);
+            //xdebug("Colony list parsed OK", colonies);
             return colonies;
         },
 
@@ -488,7 +485,7 @@ const DEBUG = true;
                 fleets.push(f);
             });
             assert(fleets.length > 0, "No fleets in fleet list?");
-            xdebug("Fleet list parsed OK", fleets);
+            //xdebug("Fleet list parsed OK", fleets);
             return fleets;
         },
     }
