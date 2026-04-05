@@ -8,7 +8,8 @@
 // @homepageURL https://github.com/seko70/tm-atmoburn/blob/main/abs-uranium-highlighter/README.md
 // @match       https://*.atmoburn.com/overview.php?view=15
 // @match       https://*.atmoburn.com/outpostsetup.php?fleet=*&station=*
-// @version     1.0.0
+// @match       https://*.atmoburn.com/outpost.php?*
+// @version     1.1.0
 // @grant       none
 // ==/UserScript==
 
@@ -42,9 +43,24 @@
     function hiliteOutpostSetup() {
         const mid = document.getElementById('midcolumn');
         if (!mid) return;
-        const cell = [...mid.querySelectorAll("td")].find(td => td.textContent.includes("Uranium"));
+        const cell = [...mid.querySelectorAll("form > table:nth-of-type(2) > tbody > tr > td")].find(td => td.textContent.includes("Uranium"));
         if (!cell) return;
         const units = parseInt(cell.textContent.replaceAll(/\D/g, ''));
+        if (units == null || Number.isNaN(units)) return;
+        if (units < ALERT_LIMIT) {
+            cell.style.backgroundColor = ALERT_BG_COLOR;
+        } else if (units < WARNING_LIMIT) {
+            cell.style.backgroundColor = WARNING_BG_COLOR;
+        }
+    }
+
+    function hiliteOutpost() {
+        const mid = document.getElementById('midcolumn');
+        if (!mid) return;
+        const cell = [...mid.querySelectorAll("form > table > tbody > tr > td")].find(td => td.textContent.includes("Uranium"));
+        if (!cell) return;
+        const units = parseInt(cell.nextElementSibling.textContent.replaceAll(/\D/g, ''));
+        if (units == null || Number.isNaN(units)) return;
         if (units < ALERT_LIMIT) {
             cell.style.backgroundColor = ALERT_BG_COLOR;
         } else if (units < WARNING_LIMIT) {
@@ -58,6 +74,8 @@
             hiliteOutpostsOverview();
         } else if (urlstr.match(/atmoburn\.com\/outpostsetup\.php/i)) {
             hiliteOutpostSetup();
+        } else if (urlstr.match(/atmoburn\.com\/outpost\.php/i)) {
+            hiliteOutpost();
         }
     } catch (e) {
         console.error('abs-uranium-highlighter: error', e);
