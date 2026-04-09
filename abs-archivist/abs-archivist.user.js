@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Archivist
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.15.1
+// @version      0.15.2
 // @description  Parses and stores various entities while browsing AtmoBurn; see Tampermonkey menu for some actions; see abs-awacs for in-game UI
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
@@ -82,6 +82,8 @@
     const now = Date.now();
     // player name (current, lazy initialized
     let playerName = null;
+    const EMPTY_FLEET = {colony: null, world: null, system: null, x: null, y: null, z: null};
+
 
     // just log the message to console, with script name as a prefix
     function xdebug(msg, ...data) {
@@ -598,14 +600,14 @@
             if (typeof f.ships != 'number') f.ships = safeInteger(f.ships);
             if (typeof f.tonnage != 'number') f.tonnage = safeFloat(f.tonnage);
             if (!f.roster || !f.roster.length || f.roster === '""') f.roster = null;
-            Parsing.fixUndefined(f);
+            //Parsing.fixUndefined(f);
         },
         sanitizeSignature: function (s) {
             Parsing.sanitizeFleet(s); // for now  it is the same as fleet (except "signature" an "id" fields)
         },
         sanitizeColony: function (c) {
             Parsing.fixRelation(c);
-            Parsing.fixUndefined(c);
+            // Parsing.fixUndefined(c);
         },
         parseFleetLocationFromLink: function (f, locLink, refObj = null) {
             if (!f) return;
@@ -712,7 +714,7 @@
         const fid = Parsing.parseFleetIdFromURL();
         if (!fid) return; // No fleet ID in page URL means there is no info to parse
         // retrieve fleet info or create new one
-        let fleet = {id: fid, ts: now, relation: Relation.MY};
+        let fleet = {id: fid, ts: now, relation: Relation.MY, ...EMPTY_FLEET};
         // if fleet info is complete and recent, just quit
         if (fleet.x && !isOlderThan(fleet.ts, now, 30)) {
             setRefPoint(fleet, fid);
@@ -727,10 +729,8 @@
         // parse fleet location (colony, world, system) if present
         const leftData = navData.querySelector('div#positionLeft');
         leftData?.querySelectorAll('a[href]')?.forEach((link) => {
-            if (Parsing.parseColonyInfoFromLink(link, fleet, 'colony', 'colonyName'))
-                return;
-            if (Parsing.parseWorldInfoFromLink(link, fleet, 'world', 'worldName'))
-                return;
+            if (Parsing.parseColonyInfoFromLink(link, fleet, 'colony', 'colonyName')) return;
+            if (Parsing.parseWorldInfoFromLink(link, fleet, 'world', 'worldName')) return;
             Parsing.parseSystemInfoFromLink(link, fleet, 'system', 'systemName');
         });
         [fleet.location, fleet.ts, fleet.relation, fleet.src] = [fleet.colonyName || fleet.worldName || fleet.systemName, now, Relation.MY, 'f'];
@@ -840,7 +840,7 @@
                 const row4 = rows[rownum + 3];
                 rownum += 4;
                 // first row = signature
-                let f = {signature: sig_text.split(' ').pop(), ts: now, src: 'sc'};
+                let f = {signature: sig_text.split(' ').pop(), ts: now, src: 'sc', ...EMPTY_FLEET};
                 // second row
                 const r2cols = Array.from(row2?.querySelectorAll(':scope > td'));
                 const flink = r2cols[0].querySelector(':scope > a[href^="/fleet.php?"]');
@@ -990,7 +990,7 @@
                 ts: now,
                 src: `rp.${empiredb}`,
             };
-            Parsing.fixUndefined(rp);
+            // Parsing.fixUndefined(rp);
             rpList.push(rp);
         });
         // save (create, update, delete) parsed items
