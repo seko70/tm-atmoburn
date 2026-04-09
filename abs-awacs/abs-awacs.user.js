@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - AWACS
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.15.2
+// @version      0.15.3
 // @description  UI for abs-archivist - display nearest fleets, colonies, rally points in various contexts; uses data produced by abs-archivist
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
@@ -317,11 +317,11 @@ a.icon { text-decoration: none !important; }
     function _getTargetFleetUrlParams(o) {
         // example: tpos=colony&tsystem=123&x=3949&y=-1&z=-1
         const s = o.system ?? -1;
-        if (o.colony) return `tpos=colony&tsystem=${s}&x=${o.colony}&y=-1&z=-1`;
-        if (o.world) return `tpos=world&tsystem=${s}&x=${o.world}&y=-1&z=-1`;
+        if (o.colony) return `tpos=colony&tsystem=${s}&x=${o.colony}&y=-1&z=-1&tfleet=${o.id}`;
+        if (o.world) return `tworld=${o.world}`;
         if (o.x === null) return null;
-        if (o.system) return `tpos=system&tsystem=${s}&x=${o.x}&y=${o.y}&z=${o.z}`;
-        return `tpos=global&x=${o.x}&y=${o.y}&z=${o.z}`;
+        if (o.system) return `tpos=system&tsystem=${s}&x=${o.x}&y=${o.y}&z=${o.z}&tfleet=${o.id}`;
+        return `tpos=global&x=${o.x}&y=${o.y}&z=${o.z}&tfleet=${o.id}`;
     }
 
     function _computeLaunchLink(objType, obj) {
@@ -336,7 +336,7 @@ a.icon { text-decoration: none !important; }
         }
         if (objType === Type.Fleet) {
             const p = _getTargetFleetUrlParams(obj);
-            return p ? `/fleet.php?${p}&tfleet=${obj.id}&fleet=${refPoint.fid}` : null;
+            return p ? `/fleet.php?fleet=${refPoint.fid}&${p}` : null;
         }
         if (objType === Type.RP || objType === Type.WH) {
             return `/fleet.php?x=${obj.x}&y=${obj.y}&z=${obj.z}&tpos=global&fleet=${refPoint.fid}`;
