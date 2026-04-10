@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Blueprints Colorizer
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.11.0
+// @version      0.11.2
 // @description  Parses and highlights best/worst/most effective blueprints (per attribute)
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-blueprint-colorizer/abs-blueprint-colorizer.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-blueprint-colorizer/abs-blueprint-colorizer.user.js
@@ -135,19 +135,19 @@
         }
 
         function getBlueprintRows() {
-            return byId('midcolumn').querySelectorAll('form > div > div[id] > div:nth-child(2) > div');
+            return byId('midcolumn').querySelectorAll('form > div > div[id] > div:nth-of-type(2) > div');
         }
 
         function getTablePrompts(row) {
-            return row.querySelectorAll('div:nth-child(1) > table > tbody > tr > td:first-of-type');
+            return row.querySelectorAll(':scope > div:first-of-type > table > tbody > tr > td:first-of-type');
         }
 
         function getBlueprintType(row) {
-            return row.querySelectorAll('div:nth-child(1) > div:nth-child(2) > div:nth-child(1)');
+            return row.querySelector(':scope > div:first-of-type > div:nth-of-type(2)')
         }
 
         function getResourceTablePrompts(row) {
-            return row.querySelectorAll('div:nth-child(2) > table > tbody > tr > td:first-of-type');
+            return row.querySelectorAll(':scope > div:nth-of-type(2) > table > tbody > tr > td:first-of-type');
         }
 
         function parseResourceTableAttribute(attr, resourcePromptElements) {
@@ -165,7 +165,7 @@
 
         function isHybrid(bpTypeElement) {
             if (!bpTypeElement) throw new NoElementError(ATTR.HYBRID);
-            const el = bpTypeElement[0];
+            const el = bpTypeElement.querySelector(':scope > div:first-of-type');
             const isHybrid = el && el.textContent?.trim().includes(' / ');
             if (!isHybrid) return null; // ignore if not set
             return {attr: ATTR.HYBRID, val: isHybrid, el: el.parentNode.parentNode};
@@ -209,7 +209,7 @@
         }
 
         function colorizeProperty(attr, val, el, extremes) {
-            console.debug(attr, extremes);
+            //console.debug("colorizeProperty", attr, extremes);
             if (extremes.best === extremes.worst) return; // do not colorize if the are all equal
             const p = 1.0 - (Math.abs((val - extremes.best) / (extremes.best - extremes.worst)));
             let color = attr.c ? null : findQualityColor(p);
