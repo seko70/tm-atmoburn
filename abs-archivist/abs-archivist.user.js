@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Archivist
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.15.2
+// @version      0.16.0
 // @description  Parses and stores various entities while browsing AtmoBurn; see Tampermonkey menu for some actions; see abs-awacs for in-game UI
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
@@ -51,10 +51,10 @@
         rp: ['id', 'name', 'x', 'y', 'z', 'relation', 'type', 'comment', 'ts', 'src'],
         wh: ['id', 'name', 'system', 'x', 'y', 'z', 'tsystem', 'tx', 'ty', 'tz', 'comment', 'ts', 'src'],
         signature: ['id', 'name', 'x', 'y', 'z', 'system', 'world', 'colony', 'player', 'faction', 'relation', 'location', 'speed', 'ships', 'tonnage', 'roster', 'ts', 'src'],
-        relation: ['id', 'relation', 'ts', 'src'],
+        relation: ['id', 'relation', `ts`, 'src'],
     };
 
-    const STATIC_DATA = ['world', 'system', 'wh', 'rp']; // these data are not changed during the game
+    const STATIC_DATA = ['world', 'system', 'colony', 'wh', 'rp']; // these data are not changed during the game
 
     const Relation = {
         MY: 'm',
@@ -67,6 +67,20 @@
         'friend': Relation.Friend,
         'no contact': Relation.Neutral,
         'peace': Relation.Neutral,
+    }
+
+    const Source = {
+        FLEET_OVERVIEW: 'fo',
+        FLEET_LIST: 'fl',
+        FLEET_SCAN: 'sf',
+        FLEET_SCREEN: 'fs',
+        COLONY_SCREEN: 'cs',
+        COLONY_LIST: 'cl',
+        COLONY_SCAN: 'sc',
+        WORMHOLE_LIST: 'wl',
+        FUEL_BUNKER: 'fb',
+        RALLY_POINTS: 'rp',
+        SENSOR_NET: 'sn',
     }
 
     // --- Various helpers
@@ -82,7 +96,6 @@
     const now = Date.now();
     // player name (current, lazy initialized
     let playerName = null;
-    const EMPTY_FLEET = {colony: null, world: null, system: null, x: null, y: null, z: null};
 
 
     // just log the message to console, with script name as a prefix
@@ -165,92 +178,113 @@
 
     // --- IndexedDB helpers -------------------------------------------------------
 
-    // select only "registerd" attributes, return sanitized object
-    function sanitize(type, data) {
-        const allowed = ENTITY_DEFS[type];
-        assert(allowed, `Unknown entity type: "${type}"`);
-        const out = {};
-        for (const k of allowed) {
-            if (k in data) out[k] = data[k];
-        }
-        if (!('id' in out) || out.id === undefined || out.id === null || String(out.id).trim() === '') {
-            throw new Error(`[${type}] 'id' is required`);
-        }
-        return out;
-    }
-
-    // returns true only if new data are changed (ignores attributes not present in new data)
-    function isShallowEqualForUpdate(type, oldData, newData) {
-        const ks = ENTITY_DEFS[type];
-        for (const k of ks) {
-            if (newData[k] != null && !Object.is(oldData[k], newData[k]))
-                return false; // handles NaN correctly
-        }
-        return true;
-    }
-
-    async function update(type, data, bulk = false) { // same as 'create', but updates data if data.id already exists
-        const tbl = db.table(type);
-        const obj = sanitize(type, data);
-        const exists = await tbl.get(obj.id);
-        if (exists) {
-            if (STATIC_DATA.includes(type) && isShallowEqualForUpdate(type, exists, obj)) {
-                //xdebug(`Identical data, no update needed: ${type}#${data.id}`, exists, obj);
-                return false;
+    const ADB = {
+        // select only "registerd" attributes, return sanitized object
+        _sanitize: function (type, data) {
+            const allowed = ENTITY_DEFS[type];
+            assert(allowed, `Unknown entity type: "${type}"`);
+            const out = {};
+            for (const k of allowed) {
+                if (k in data) out[k] = data[k];
             }
-            await tbl.update(obj.id, obj);
-        } else {
-            await tbl.put(obj);
+            if (!('id' in out) || out.id === undefined || out.id === null || String(out.id).trim() === '') {
+                throw new Error(`[${type}] 'id' is required`);
+            }
+            return out;
+        },
+        // returns true only if new data are changed (ignores attributes not present in new data)
+        _isShallowEqualForUpdate: function (type, oldData, newData) {
+            if (!STATIC_DATA.includes(type)) return false; // non-static entities should be always updated
+            const ks = ENTITY_DEFS[type];
+            for (const k of ks) {
+                if (['ts', 'src'].includes(k)) continue; // timestamp, src etc are volatile, don't count it as a reason for update
+                if (newData[k] != null && !Object.is(oldData[k], newData[k])) {
+                    return false; // note: handles NaN correctly
+                }
+            }
+            return true;
+        },
+        // stores object (update if overwrite == false)
+        store: async function (type, data, overwrite = false) {
+            const tbl = db.table(type);
+            const obj = ADB._sanitize(type, data);
+            const existingObj = overwrite ? null : await tbl.get(obj.id);
+            if (existingObj) {
+                if (ADB._isShallowEqualForUpdate(type, existingObj, obj)) {
+                    return false;
+                }
+                xdebug("storing (update)", type, obj);
+                await tbl.update(obj.id, obj);
+            } else {
+                xdebug("storing (put)", type, obj);
+                await tbl.put(obj);
+            }
+            return true;
+        },
+        // same as 'store', but for array of objects
+        bulkStore: async function (type, items, overwrite = false) {
+            // optimize if empty
+            if (!items || !items.length) {
+                return 0;
+            }
+            // optimize if single element
+            if (items.length === 1) {
+                return await ADB.store(type, items[0], overwrite) ? 1 : 0;
+            }
+            // sanitize all items
+            const sanitized = items.map(data => ADB._sanitize(type, data));
+            // declare target table
+            const table = db.table(type);
+            // use bulkPut directly if appropriate..
+            if (overwrite) {
+                xdebug("storing (bulkPut)", type, sanitized);
+                await table.bulkPut(sanitized);
+                return sanitized.length;
+            }
+            // check for entities if they are already persisted
+            const ids = sanitized.map(item => item.id);
+            const existing = await table.bulkGet(ids);
+            const toInsert = [];
+            const toUpdate = [];
+            for (let i = 0; i < sanitized.length; i += 1) {
+                const obj = sanitized[i];
+                const existingObj = existing[i];
+                if (existingObj == null) { // not stored - put is needed
+                    toInsert.push(obj);
+                } else if (!ADB._isShallowEqualForUpdate(type, existingObj, obj)) {
+                    const {id, ...changes} = obj; // skip id - we don't want to update primary key
+                    toUpdate.push({key: id, changes});
+                }
+            }
+            // insert new records
+            if (toInsert.length > 0) {
+                xdebug("storing (bulkPut)", type, toInsert);
+                await table.bulkPut(toInsert);
+            }
+            // update existing records
+            if (toUpdate.length > 0) {
+                xdebug("storing (bulkUpdate)", type, toUpdate);
+                await table.bulkUpdate(toUpdate);
+            }
         }
-        if (!bulk) xdebug(`Object "${type}" updated`, obj);
-        return true;
-    }
+    };
 
-    async function bulkUpdate(type, items) { // same as 'update', but for array of objects
-        let count = 0;
-        // FIXME this is not optimal, but for now ...
-        for (const item of items) {
-            if (await update(type, item, true)) count += 1;
-        }
-        xdebug(`Objects "${type}" bulk-updated`, count);
-        return count;
-    }
-
-    async function save(type, data) { // same as 'create', but replaces data if data.id already exists
-        const tbl = db.table(type);
-        const obj = sanitize(type, data);
-        await tbl.put(obj);
-        xdebug(`Object "${type}" saved`, obj);
-        return true;
-    }
-
-    async function bulkSave(type, items) { // same as 'save', but for array of objects
-        const tbl = db.table(type);
-        const sanitized = items.map(data => sanitize(type, data));
-        await tbl.bulkPut(sanitized);
-        xdebug(`Objects "${type}" bulk-saved`, sanitized.length);
-        return sanitized.length;
-    }
-
-    function updateColonyFromObject(id, c, obj) {
-        c.id = id;
-        c.ts = now;
-        safeCopy(c, ['name', 'world', 'system', 'x', 'y', 'z'], obj, ['colonyName', 'world', 'system', 'x', 'y', 'z']);
-        assert(c.name);
-        assert(c.world);
+    function createColonyFromFleet(id, fleet) {
+        const c = {id: id, ts: now};
+        safeCopy(c, ['name', 'world', 'system', 'x', 'y', 'z'], fleet, ['colonyName', 'world', 'system', 'x', 'y', 'z']);
+        Parsing.sanitizeColony(c);
         return c;
     }
 
-    function updateWorldFromObject(id, w, obj) {
-        w.id = id;
-        safeCopy(w, ['name', 'system', 'x', 'y', 'z'], obj, ['worldName', 'system', 'x', 'y', 'z']);
-        assert(w.system);
+    function createWorldFromFleet(id, fleet) {
+        const w = {id: id};
+        safeCopy(w, ['name', 'system', 'x', 'y', 'z'], fleet, ['worldName', 'system', 'x', 'y', 'z']);
         return w;
     }
 
-    function updateSystemFromObject(id, s, obj) {
-        s.id = id;
-        safeCopy(s, ['name', 'x', 'y', 'z'], obj, ['systemdName', 'x', 'y', 'z']);
+    function createSystemFromFleet(id, fleet) {
+        const s = {id: id};
+        safeCopy(s, ['name', 'x', 'y', 'z'], fleet, ['systemdName', 'x', 'y', 'z']);
         return s;
     }
 
@@ -258,9 +292,8 @@
         assert(!!worldId);
         const keepIds = new Set(colonyList.map(obj => obj.id));
         const idsToDelete = await db.colony.where('world').equals(worldId).filter(x => !keepIds.has(x.id)).primaryKeys();
-        xdebug('idsToDelete', idsToDelete);
         if (!idsToDelete || !idsToDelete.length) return 0;
-        xdebug('deleting colonies', idsToDelete);
+        xdebug('Deleting missing colonies', idsToDelete);
         await db.colony.bulkDelete(idsToDelete);
         return idsToDelete.length;
     }
@@ -268,9 +301,8 @@
     async function deleteMyMissingColonies(colonyList) { // delete all my colonies not in the list
         const keepIds = new Set(colonyList.map(obj => obj.id));
         const idsToDelete = await db.colony.where('relation').equals(Relation.MY).filter(x => !keepIds.has(x.id)).primaryKeys();
-        xdebug('idsToDelete', idsToDelete);
         if (!idsToDelete || !idsToDelete.length) return 0;
-        xdebug('deleting colonies', idsToDelete);
+        xdebug('Deleting my missing colonies', idsToDelete);
         await db.colony.bulkDelete(idsToDelete);
         return idsToDelete.length;
     }
@@ -283,6 +315,7 @@
         const keepIds = new Set(myFleetList.map(obj => obj.id));
         const idsToDelete = await db.fleet.where('relation').equals(Relation.MY).filter(f => !keepIds.has(f.id)).primaryKeys();
         if (!idsToDelete || !idsToDelete.length) return 0;
+        xdebug('Deleting missing fleets', idsToDelete);
         await db.fleet.bulkDelete(idsToDelete);
         return idsToDelete.length;
     }
@@ -292,8 +325,8 @@
         const prefixToDelete = `#${empiredb}.`
         const idsToDelete = await db.rp.filter(r => r.id.startsWith(prefixToDelete) && !keepIds.has(r.id)).primaryKeys();
         if (!idsToDelete || !idsToDelete.length) return 0;
+        xdebug('Deleting missing RPs', idsToDelete);
         await db.rp.bulkDelete(idsToDelete);
-        xlog('Deleted RP', idsToDelete);
         return idsToDelete.length;
     }
 
@@ -338,50 +371,50 @@
     const WF_BASE_URL = `https://${window.location.host}`;
 
     async function fetchSystemInfo(sid) {
-        //xdebug(`fetchSystemInfo(id=${sid})`);
         let s = await db.system.get(sid);
         if (s) return s;
         const url = `${WF_BASE_URL}/API/?c=system&ID=${sid}`;
         const response = await fetch(url);
-        //xdebug(`fetchSystemInfo(id=${sid}) fetch response`, response);
-        assert(response.ok, `Error fetchnig ${url}, status: ${response.status}`);
+        if (!response.ok) {
+            xerror(`Error fetching ${url}, status: ${response.status}`);
+            return null;
+        }
         s = await response.json();
         if (!s) {
-            xdebug(`fetchSystemInfo(id=${sid}) - no data; unexplored or empire explored?`);
+            xerror(`fetchSystemInfo(id=${sid}) - no data; unexplored or empire explored?`);
             return null;
         }
         s = {id: s.ID, name: s.name, x: s.x, y: s.y, z: s.z, galaxy: s.galaxy};
-        await save('system', s);
-        //xdebug('fetchSystemInfo: system stored', s)
+        await ADB.store('system', s, true);
         return s;
     }
 
     async function fetchWorldInfo(wid) {
-        //xdebug(`fetchWorldInfo(id=${wid})`);
         let w = await db.world.get(wid);
         if (w) return w;
         const url = `${WF_BASE_URL}/API/?c=world&ID=${wid}`;
         const response = await fetch(url);
-        xdebug(`fetchWorldInfo(id=${wid}) fetch response`, response);
-        assert(response.ok, `Error fetchnig ${url}, status: ${response.status}`);
+        //xdebug(`fetchWorldInfo(id=${wid}) fetch response`, response);
+        if (!response.ok) {
+            xerror(`Error fetching ${url}, status: ${response.status}`);
+            return null;
+        }
         w = await response.json();
         if (!w) {
-            xdebug(`fetchWorldInfo(id=${wid}) - no data; unexplored or empire explored?`);
+            xerror(`fetchWorldInfo(id=${wid}) - no data; unexplored or empire explored?`);
             return null;
         }
         const s = await fetchSystemInfo(w.system);
         w = {id: w.ID, name: w.name, system: w.system, x: s.x, y: s.y, z: s.z};
-        await save('world', w);
-        //xdebug('fetchWorldInfo: world stored', w)
+        await ADB.store('world', w, true);
         return w;
     }
 
     // async job to clean old/expired/dead fleets, signatures and duplicates in general; heuristic is used, be warned!
     async function fleetCleanup() {
-        const now = new Date();
         const RESERVE_MS = 3 * 60 * 1000;
 
-        async function _processSignature(sig, now) {
+        async function _processSignature(sig) {
             // 1. check for fleets with same signature
             let matchingFleet = await db.fleet.where('signature').equals(sig.id).first();
             if (matchingFleet) {
@@ -406,7 +439,7 @@
         const idsToDelete = [];
         const allSignatures = await db.signature.toArray();
         for (const sig of allSignatures) {
-            const shouldDelete = await _processSignature(sig, now);
+            const shouldDelete = await _processSignature(sig);
             if (shouldDelete) {
                 idsToDelete.push(sig.id);
             }
@@ -428,7 +461,7 @@
             const cid = Parsing.parseColonyIdFromURL();
             if (!cid) return; // No colony ID in page URL = no parsing
             // retrieve colony info or create new one
-            let colony = {id: cid, relation: Relation.MY, player: Parsing.parsePlayerName(), ts: now, src: 'c'};
+            let colony = {id: cid, relation: Relation.MY, player: Parsing.parsePlayerName(), ts: now, src: Source.COLONY_SCREEN};
             // parse colony system and world info
             const mid = byId('midcolumn');
             const subtitleElement = mid?.querySelector('div.subtitle');
@@ -461,7 +494,7 @@
             if (!colonylist) return null;
             const colonies = [];
             colonylist.querySelectorAll('a[href*="/view_colony.php?colony="]')?.forEach((node) => {
-                const c = {src: 'cl'};
+                const c = {ts: now, src: Source.COLONY_LIST};
                 const parsedOK = Parsing.parseColonyInfoFromLink(node, c, 'id', 'name');
                 assert(parsedOK, `Can't parse colony id/name from colony list node ${node?.outerHTML}`);
                 c.name = useDefault(stripTags(c.name));
@@ -479,7 +512,7 @@
             if (!fleetlist) return null;
             const fleets = [];
             fleetlist.querySelectorAll('a[href*="/fleet.php?fleet="]')?.forEach((node) => {
-                const f = {src: 'fl'};
+                const f = {ts: now, src: Source.FLEET_LIST};
                 const parsedOK = Parsing.parseFleetInfoFromLink(node, f, 'id', 'name');
                 assert(parsedOK, `Can't parse fleet id/name from colony list node ${node?.outerHTML}`);
                 f.name = useDefault(stripTags(f.name));
@@ -512,9 +545,6 @@
             const m = document.URL.match(pattern);
             return (m && m[1]) ? Number(m[1]) : null;
         },
-        getElementsByExactText: function (elements, text) {
-            return elements ? Array.from(elements).filter(e => Parsing.textContent(e) === text) : null;
-        },
         getElementsByPrefixText: function (elements, text) {
             return elements ? Array.from(elements).filter(e => Parsing.textContent(e).startsWith(text)) : null;
         },
@@ -538,7 +568,7 @@
             const m = (link.href || link.getAttribute('onClick'))?.match(pattern);
             if (!m) return false;
             if (idAttr) obj[idAttr] = Number(m[1]);
-            if (nameAttr) obj[nameAttr] = Parsing.textContent(link);
+            if (nameAttr) obj[nameAttr] = stripTags(Parsing.textContent(link));
             return true;
         },
         parseFleetInfoFromLink: function (link, obj, idAttr, nameAttr) {
@@ -594,20 +624,24 @@
                 }
             }
         },
+        setDefaultsIfNotDefined: function (obj, defaults) {
+            Object.assign(obj, Object.fromEntries(Object.entries(defaults).filter(([k]) => !(k in obj))));
+        },
         sanitizeFleet: function (f) {
             Parsing.fixRelation(f);
             if (typeof f.speed != 'number') f.speed = safeInteger(f.speed);
             if (typeof f.ships != 'number') f.ships = safeInteger(f.ships);
             if (typeof f.tonnage != 'number') f.tonnage = safeFloat(f.tonnage);
             if (!f.roster || !f.roster.length || f.roster === '""') f.roster = null;
-            //Parsing.fixUndefined(f);
+            Parsing.fixUndefined(f);
+            Parsing.setDefaultsIfNotDefined(f, {colony: null, world: null, system: null, x: null, y: null, z: null});
         },
         sanitizeSignature: function (s) {
-            Parsing.sanitizeFleet(s); // for now  it is the same as fleet (except "signature" an "id" fields)
+            Parsing.sanitizeFleet(s); // for now it is the same as fleet (except "signature" an "id" fields)
         },
         sanitizeColony: function (c) {
             Parsing.fixRelation(c);
-            // Parsing.fixUndefined(c);
+            Parsing.fixUndefined(c);
         },
         parseFleetLocationFromLink: function (f, locLink, refObj = null) {
             if (!f) return;
@@ -633,7 +667,7 @@
             // two variants of wormhole list exists
             const targetSystemColumnNumber = divs.length === 6 ? 3 : 2;
             // parse wormhole name
-            const wh = {ts: now, src: 'ku'};
+            const wh = {ts: now, src: Source.WORMHOLE_LIST, tsystem: null, tlocation: null};
             wh.name = useDefault(Parsing.textContent(divs[0]));
             // parse wormhole system
             Parsing.parseSystemInfoFromLink(divs[1], wh, 'system', 'location');
@@ -661,11 +695,9 @@
         for (const link of whAddLinks) {
             await _parseWormhole(link.parentNode.parentNode, wormholeList);
         }
-        // save (create or update) parsed items
-        const saved = await bulkSave('wh', wormholeList);
-        // note timestamp for this screen
-        storeTimestamp(empiredb === 1 ? StoredTimestamps.WormholesEmpire : StoredTimestamps.WormholesMy, now)
-        xlog(`Stored ${saved} wormholes`);
+
+        await ADB.bulkStore('wh', wormholeList, true);
+        storeTimestamp(empiredb === 1 ? StoredTimestamps.WormholesEmpire : StoredTimestamps.WormholesMy, now);
     }
 
     async function parseMyFleetsOverview() {
@@ -678,7 +710,7 @@
                 player: Parsing.parsePlayerName(),
                 relation: Relation.MY,
                 ts: now,
-                src: 'fo',
+                src: Source.FLEET_OVERVIEW,
             }
             const divs = node.parentNode.parentNode.querySelectorAll(':scope > div');
             f.ships = Parsing.textContent(divs[2]);
@@ -702,11 +734,9 @@
                 await _parseFleet(node, fleets);
             }
         }
-        // save (create, update, delete) parsed items
-        const saved = await bulkSave('fleet', fleets);
-        // note timestamp for this screen
+
+        await ADB.bulkStore('fleet', fleets, true);
         storeTimestamp(StoredTimestamps.Fleets, now);
-        xlog(`Stored fleets: ${saved}`);
     }
 
     async function parseFleetScreen() {
@@ -714,13 +744,7 @@
         const fid = Parsing.parseFleetIdFromURL();
         if (!fid) return; // No fleet ID in page URL means there is no info to parse
         // retrieve fleet info or create new one
-        let fleet = {id: fid, ts: now, relation: Relation.MY, ...EMPTY_FLEET};
-        // if fleet info is complete and recent, just quit
-        if (fleet.x && !isOlderThan(fleet.ts, now, 30)) {
-            setRefPoint(fleet, fid);
-            xdebug(`parseFleetScreen: no recent changes for #${fid}`, new Date(fleet.ts));
-            return;
-        }
+        let fleet = {id: fid, ts: now, relation: Relation.MY, src: Source.FLEET_SCREEN};
         // find navigation data panel
         const navData = parent.document.getElementById('navData');
         if (!navData) return;
@@ -733,34 +757,24 @@
             if (Parsing.parseWorldInfoFromLink(link, fleet, 'world', 'worldName')) return;
             Parsing.parseSystemInfoFromLink(link, fleet, 'system', 'systemName');
         });
-        [fleet.location, fleet.ts, fleet.relation, fleet.src] = [fleet.colonyName || fleet.worldName || fleet.systemName, now, Relation.MY, 'f'];
-        // fleet name
-        fleet.name = useDefault(stripTags(
-            Parsing.textContent(parent.document.getElementById('pageHeadLine'))
-        ));
-        setRefPoint(fleet, fid);
+        fleet.location = fleet['colonyName'] || fleet['worldName'] || fleet['systemName'];
         // check for confed/shared fleets
         const shared = Parsing.textContent(parent.document.getElementById('midcolumn').querySelector('div.subtext'));
         if (shared && shared === 'Shared empire access') {
             fleet.relation = Relation.Friend;
             fleet.player = '(CONFED)';
         }
-        // sanitize fleet data
-        Parsing.sanitizeFleet(fleet);
-        // save fleet info (create or update)
-        await update('fleet', fleet);
-        xlog("Updated fleet", fleet);
+        // fleet name
+        fleet.name = useDefault(stripTags(Parsing.textContent(parent.document.getElementById('pageHeadLine'))));
+        setRefPoint(fleet, fid);
+
         // cache colony, world and system coordinates - eventually
-        if (fleet.colony) {
-            Parsing.sanitizeColony(fleet.colony);
-            await update('colony', updateColonyFromObject(fleet.colony, {}, fleet));
-        }
-        if (fleet.world) {
-            await update('world', updateWorldFromObject(fleet.world, {}, fleet));
-        }
-        if (fleet.system) {
-            await update('system', updateSystemFromObject(fleet.system, {}, fleet));
-        }
+        if (fleet.colony) await ADB.store('colony', createColonyFromFleet(fleet.colony, fleet));
+        if (fleet.world) await ADB.store('world', createWorldFromFleet(fleet.world, fleet));
+        if (fleet.system) await ADB.store('system', createSystemFromFleet(fleet.system, fleet));
+
+        Parsing.sanitizeFleet(fleet);
+        await ADB.store('fleet', fleet);
     }
 
     async function parseColonyScreen() {
@@ -776,23 +790,20 @@
         }
         Parsing.sanitizeColony(colony);
         setRefPoint(colony);
-        await save('colony', colony);
-        xlog("Updated colony", colony);
+        await ADB.store('colony', colony, true);
     }
 
     async function parseSideLists() {
         try {
             const myColonies = PureParser.parseColonyList();
-            const deleted = await deleteMyMissingColonies(myColonies);
-            if (deleted) xlog(`Deleted my missing colonies: ${deleted}`);
-            await bulkUpdate('colony', myColonies);
+            await deleteMyMissingColonies(myColonies);
+            await ADB.bulkStore('colony', myColonies);
         } catch (err) {
             notify('Error while parsing/processing side colony list', err);
         }
         try {
             const myFleets = PureParser.parseFleetList();
-            const deleted = await deleteMissingFleets(myFleets);
-            if (deleted) xlog(`Deleted my missing fleets: ${deleted}`);
+            await deleteMissingFleets(myFleets);
         } catch (err) {
             notify('Error while parsing/processing side fleet list', err);
         }
@@ -801,7 +812,7 @@
     async function parseScan() {
 
         function _parseColonyFromScan(clink, scanner, colonyList) {
-            const c = {ts: now, src: 'sc'};
+            const c = {ts: now, src: Source.COLONY_SCAN};
             const parsed = Parsing.parseInfoFromLink(clink, /tcolony=(\d+)/, c, 'id', 'name');
             assert(parsed, 'No colony info in link ' + clink.outerHTML);
             const row = clink.parentElement.parentElement;
@@ -840,7 +851,7 @@
                 const row4 = rows[rownum + 3];
                 rownum += 4;
                 // first row = signature
-                let f = {signature: sig_text.split(' ').pop(), ts: now, src: 'sc', ...EMPTY_FLEET};
+                let f = {signature: sig_text.split(' ').pop(), ts: now, src: Source.FLEET_SCAN};
                 // second row
                 const r2cols = Array.from(row2?.querySelectorAll(':scope > td'));
                 const flink = r2cols[0].querySelector(':scope > a[href^="/fleet.php?"]');
@@ -867,10 +878,8 @@
                     xerror('Unabled to parse fleet id and/or name', f);
                 }
             }
-            // save (create or update) fleets
-            xdebug(`fleets to update: ${JSON.stringify(fleets)}`);
-            const savedFleets = await bulkUpdate('fleet', fleets);
-            xdebug(`Scanned and stored ${savedFleets} fleets`);
+
+            await ADB.bulkStore('fleet', fleets);
         }
 
         async function _parseColoniesFromScan(scanner) {
@@ -884,11 +893,9 @@
                     }
                 });
             }
-            // save (create or update) colonies, delete ones that do not exist anymore
-            await bulkUpdate('colony', colonies);
-            xlog('Updated colonies at w#', scanner.world, colonies);
-            const deleted = await deleteMissingColonies(colonies, scanner.world);
-            xlog(`Colonies at world #${scanner.world}: updated=${colonies.length}, deleted=${deleted}`);
+
+            await ADB.bulkStore('colony', colonies);
+            await deleteMissingColonies(colonies, scanner.world);
         }
 
         let obj = null;
@@ -922,7 +929,7 @@
             const clink = row.querySelector('a[href*="/fleet.php?fleet="][href*="&tcolony="]');
             if (clink) {
                 // starting row - parse colony id and name out of link
-                colony = {ts: now, src: 'fb'};
+                colony = {ts: now, src: Source.FUEL_BUNKER};
                 const parsed = Parsing.parseInfoFromLink(clink, /tcolony=(\d+)/, colony, 'id', 'name');
                 assert(parsed, 'No colony info in link ' + clink.outerHTML);
                 assert(colony.id);
@@ -947,8 +954,7 @@
                 const s = await fetchSystemInfo(colony.system);
                 copyXYZ(colony, s);
                 Parsing.sanitizeColony(colony);
-                await update('colony', colony);
-                xlog("Updated colony", colony)
+                await ADB.store('colony', colony);
                 colony = null;
             }
         }
@@ -988,16 +994,15 @@
                 type: titles[1][0].toUpperCase(),
                 comment: comment && comment.length ? comment : null,
                 ts: now,
-                src: `rp.${empiredb}`,
+                src: `${Source.RALLY_POINTS}.${empiredb}`,
             };
-            // Parsing.fixUndefined(rp);
+            Parsing.fixUndefined(rp);
             rpList.push(rp);
         });
-        // save (create, update, delete) parsed items
-        const saved = await bulkSave('rp', rpList);
-        const deleted = await deleteMissingRPs(rpList, empiredb)
+
+        await ADB.bulkStore('rp', rpList, true);
+        await deleteMissingRPs(rpList, empiredb)
         storeTimestamp(empiredb === 1 ? StoredTimestamps.RallyPointsEmpire : StoredTimestamps.RallyPointsMy, now);
-        xlog(`Stored/deleted RPs: ${saved}/${deleted}`);
     }
 
     async function parseSensorNet() {
@@ -1007,7 +1012,7 @@
             const divs = node.querySelectorAll(':scope > div');
             // first row
             const divs0 = divs[0].querySelectorAll(':scope > div');
-            const sig = {src: `sn.${empiredb}`, id: lastWordOf(Parsing.textContent(divs0[0]))};
+            const sig = {id: lastWordOf(Parsing.textContent(divs0[0])), src: `${Source.SENSOR_NET}.${empiredb}`};
             assert(sig.id);
             sig.ts = parseInt(divs0[1].getAttribute("gametime")) * 1000;
             // second row
@@ -1057,11 +1062,8 @@
             }
         }
 
-        // save (create or update) fleets
-        xdebug(`signatures to update: ${JSON.stringify(signatures)}`);
-        const saved = await bulkUpdate('signature', signatures);
+        await ADB.bulkStore('signature', signatures);
         storeTimestamp(empiredb === 1 ? StoredTimestamps.SensorNetEmpire : StoredTimestamps.SensorNetMy, now);
-        xlog(`Stored ${saved} signatures`);
     }
 
     // --- Menu --------------------------------------------------------------------
@@ -1118,7 +1120,7 @@
     (async () => {
         try {
             const urlstr = document.URL;
-            xdebug(`In DEBUG mode for url=${urlstr}`);
+            //xdebug(`In DEBUG mode for url=${urlstr}`);
             if (urlstr.match(/atmoburn\.com\/overview\.php\?view=2/i)) {
                 xlog(`Fleet Overview: ${urlstr}`);
                 setTimeout(safeAsync(parseMyFleetsOverview), 100);
