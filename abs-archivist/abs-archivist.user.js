@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Archivist
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.16.0
+// @version      0.17.0
 // @description  Parses and stores various entities while browsing AtmoBurn; see Tampermonkey menu for some actions; see abs-awacs for in-game UI
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
@@ -46,7 +46,7 @@
     const ENTITY_DEFS = { // allowed properties
         system: ['id', 'name', 'x', 'y', 'z', 'galaxy'],
         world: ['id', 'name', 'system', 'x', 'y', 'z'],
-        colony: ['id', 'name', 'x', 'y', 'z', 'world', 'system', 'player', 'faction', 'relation', 'population', 'size', 'ts', 'src'],
+        colony: ['id', 'name', 'x', 'y', 'z', 'world', 'system', 'player', 'faction', 'relation', 'location', 'population', 'size', 'ts', 'src'],
         fleet: ['id', 'name', 'x', 'y', 'z', 'system', 'world', 'colony', 'player', 'faction', 'relation', 'signature', 'location', 'speed', 'ships', 'tonnage', 'roster', 'ts', 'src'],
         rp: ['id', 'name', 'x', 'y', 'z', 'relation', 'type', 'comment', 'ts', 'src'],
         wh: ['id', 'name', 'system', 'x', 'y', 'z', 'tsystem', 'tx', 'ty', 'tz', 'comment', 'ts', 'src'],
@@ -54,7 +54,7 @@
         relation: ['id', 'relation', `ts`, 'src'],
     };
 
-    const STATIC_DATA = ['world', 'system', 'colony', 'wh', 'rp']; // these data are not changed during the game
+    //const STATIC_DATA = ['world', 'system', 'colony', 'wh', 'rp']; // these data are not changed during the game
 
     const Relation = {
         MY: 'm',
@@ -116,7 +116,11 @@
 
     // removes eventual tags (see abs-tag-manager)
     function stripTags(s) {
-        return s ? s.replace(ZWSP_RE, "") + ZWSP : s;
+        return s ? s.replace(ZWSP_RE, "") : s;
+    }
+
+    function toHex(s) {
+        return [...new TextEncoder().encode(s)].map(b => b.toString(16).padStart(2, '0')).join('');
     }
 
     // simple helper, for shorter expressions
@@ -194,12 +198,17 @@
         },
         // returns true only if new data are changed (ignores attributes not present in new data)
         _isShallowEqualForUpdate: function (type, oldData, newData) {
-            if (!STATIC_DATA.includes(type)) return false; // non-static entities should be always updated
+            //if (!STATIC_DATA.includes(type)) return false; // non-static entities should be always updated
             const ks = ENTITY_DEFS[type];
             for (const k of ks) {
-                if (['ts', 'src'].includes(k)) continue; // timestamp, src etc are volatile, don't count it as a reason for update
-                if (newData[k] != null && !Object.is(oldData[k], newData[k])) {
-                    return false; // note: handles NaN correctly
+                if (k === 'src') continue; // ignore management/debug/technical attributes - don't count it as a reason for update
+                if (k === 'ts' && oldData.ts && newData.ts && !isOlderThan(oldData.ts, newData.ts, 4 * 3600)) continue; // timestamp is special
+                if (newData[k] != null && !Object.is(oldData[k], newData[k])) {  // note: handles NaN correctly
+                    xdebug('_isShallowEqualForUpdate', type, oldData.id, k, oldData[k], newData[k]);
+                    if (k === 'name') {
+                        xdebug("_isShallowEqualForUpdate name hex diff", toHex(oldData[k]), toHex(newData[k]));
+                    }
+                    return false;
                 }
             }
             return true;
@@ -385,7 +394,7 @@
             return null;
         }
         s = {id: s.ID, name: s.name, x: s.x, y: s.y, z: s.z, galaxy: s.galaxy};
-        await ADB.store('system', s, true);
+        await ADB.store('system', s);
         return s;
     }
 
@@ -406,7 +415,7 @@
         }
         const s = await fetchSystemInfo(w.system);
         w = {id: w.ID, name: w.name, system: w.system, x: s.x, y: s.y, z: s.z};
-        await ADB.store('world', w, true);
+        await ADB.store('world', w);
         return w;
     }
 
@@ -476,6 +485,7 @@
             const worldLink = subtitleElement.querySelector('a[onclick*="showPlanet"]');
             Parsing.parseWorldInfoFromLink(worldLink, colony, 'world', 'worldName');
             assert(colony.world, `No world determined for colony #${cid}`);
+            colony.location = colony['worldName'] || colony['systemName'];
             // parse colony name
             colony.name = stripTags(Parsing.textContent(
                 mid.querySelector('.pagetitle > div.flex_center') ?? mid.querySelector('.pagetitle')
@@ -484,7 +494,7 @@
             // pop and size
             const colonydropdown = mid.querySelectorAll('div.colonydropdown')
             colony.population = safeInteger(Parsing.getTextAfterPrefix(colonydropdown, 'Population:'));
-            colony.size = safeFloat(Parsing.getTextAfterPrefix(colonydropdown, 'Size:'));
+            colony.size = safeInteger(Parsing.getTextAfterPrefix(colonydropdown, 'Size:'));
             return colony;
         },
 
@@ -497,7 +507,6 @@
                 const c = {ts: now, src: Source.COLONY_LIST};
                 const parsedOK = Parsing.parseColonyInfoFromLink(node, c, 'id', 'name');
                 assert(parsedOK, `Can't parse colony id/name from colony list node ${node?.outerHTML}`);
-                c.name = useDefault(stripTags(c.name));
                 c.style = node.getAttribute("style");
                 colonies.push(c);
             });
@@ -515,7 +524,6 @@
                 const f = {ts: now, src: Source.FLEET_LIST};
                 const parsedOK = Parsing.parseFleetInfoFromLink(node, f, 'id', 'name');
                 assert(parsedOK, `Can't parse fleet id/name from colony list node ${node?.outerHTML}`);
-                f.name = useDefault(stripTags(f.name));
                 f.style = node.getAttribute("style");
                 fleets.push(f);
             });
@@ -562,8 +570,6 @@
             return fleet;
         },
         parseInfoFromLink: function (link, pattern, obj, idAttr, nameAttr) {
-            // link example: <a href="/view_colony.php?colony=123&fleet=456">Seko Prime</a>
-            // pattern example: /colony=(\d+)/
             if (!link) return false;
             const m = (link.href || link.getAttribute('onClick'))?.match(pattern);
             if (!m) return false;
@@ -628,6 +634,7 @@
             Object.assign(obj, Object.fromEntries(Object.entries(defaults).filter(([k]) => !(k in obj))));
         },
         sanitizeFleet: function (f) {
+            f.name = useDefault(stripTags(f.name));
             Parsing.fixRelation(f);
             if (typeof f.speed != 'number') f.speed = safeInteger(f.speed);
             if (typeof f.ships != 'number') f.ships = safeInteger(f.ships);
@@ -640,6 +647,7 @@
             Parsing.sanitizeFleet(s); // for now it is the same as fleet (except "signature" an "id" fields)
         },
         sanitizeColony: function (c) {
+            c.name = useDefault(stripTags(c.name));
             Parsing.fixRelation(c);
             Parsing.fixUndefined(c);
         },
@@ -735,7 +743,7 @@
             }
         }
 
-        await ADB.bulkStore('fleet', fleets, true);
+        await ADB.bulkStore('fleet', fleets);
         storeTimestamp(StoredTimestamps.Fleets, now);
     }
 
@@ -790,7 +798,7 @@
         }
         Parsing.sanitizeColony(colony);
         setRefPoint(colony);
-        await ADB.store('colony', colony, true);
+        await ADB.store('colony', colony);
     }
 
     async function parseSideLists() {
@@ -821,7 +829,7 @@
             c.faction = Parsing.textContent(cols[2]); // player faction
             c.relation = Parsing.textContent(cols[3]); // player relation
             c.population = safeInteger(Parsing.textContent(cols[4])); // colony population
-            c.size = safeFloat(Parsing.textContent(cols[5])); // colony size
+            c.size = safeInteger(Parsing.textContent(cols[5])); // colony size
             // copy some attributes from scanning entity (colony or fleet)
             safeCopy(c, ['system', 'world', 'x', 'y', 'z'], scanner)
             // sanitize colony attributes
@@ -933,19 +941,13 @@
                 const parsed = Parsing.parseInfoFromLink(clink, /tcolony=(\d+)/, colony, 'id', 'name');
                 assert(parsed, 'No colony info in link ' + clink.outerHTML);
                 assert(colony.id);
-                const stored = await db.colony.get(colony.id);
-                if (stored && stored.x && !isOlderThan(stored.ts, now, 24 * 3600)) {
-                    colony = null;
-                    return; // already known and recent - skip (and don't even "touch")
-                }
-                // parse world
                 const wlink = row.querySelector('a[href*="/fleet.php"][href*="tworld="]');
                 assert(wlink);
-                colony.world = parseInt(wlink.href.match(/tworld=(\d+)/)[1]);
+                Parsing.parseInfoFromLink(wlink, /tworld=(\d+)/, colony, 'world', 'worldName');
                 // parse system
                 const slink = row.querySelector('a[href*="/fleet.php"][href*="tsystem="]');
                 assert(slink);
-                colony.system = parseInt(slink.href.match(/tsystem=(\d+)/)[1]);
+                Parsing.parseInfoFromLink(slink, /tsystem=(\d+)/, colony, 'system', 'systemName');
             } else if (colony) {
                 // second row - append info to record
                 const plink = row.querySelector('a[href*="/message.php?player="]');
@@ -953,6 +955,7 @@
                 colony.player = Parsing.textContent(plink); // add player info
                 const s = await fetchSystemInfo(colony.system);
                 copyXYZ(colony, s);
+                colony.location = colony['worldName'] || colony['systemName'];
                 Parsing.sanitizeColony(colony);
                 await ADB.store('colony', colony);
                 colony = null;
