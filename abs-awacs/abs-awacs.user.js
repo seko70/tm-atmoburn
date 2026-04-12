@@ -328,8 +328,9 @@ a.icon { text-decoration: none !important; }
         if (!refPoint.fid) return null;
         if (!obj.id) return null;
         const isControlled = obj.relation === Relation.MY || obj.player === "(CONFED)";
+        const isCivilGov = obj.player === 'Civil Goverment' || obj.player === 'Ghosts of the Past';
         if (objType === Type.Colony) {
-            if (isControlled) return `/fleet.php?tcolony=${obj.id}&fleet=${refPoint.fid}`;
+            if (isControlled || isCivilGov) return `/fleet.php?tcolony=${obj.id}&fleet=${refPoint.fid}`;
             if (obj.world) return `/fleet.php?tworld=${obj.world}&fleet=${refPoint.fid}`;
             if (obj.system) return `/fleet.php?tsystem=${obj.system}&fleet=${refPoint.fid}`;
             return null;
