@@ -8,8 +8,8 @@
 // @license        MIT
 // @match          https://*.atmoburn.com/fleet.php*
 // @match          https://*.atmoburn.com/fleet/*
-// @version        5.1.1
-// @require        https://github.com/seko70/tm-atmoburn/raw/refs/tags/commons/abs-utils/v1.2.1/commons/abs-utils.js
+// @version        5.1.3
+// @require        https://github.com/seko70/tm-atmoburn/raw/refs/tags/commons/abs-utils/v1.2.2/commons/abs-utils.js
 // @grant          none
 // ==/UserScript==
 
@@ -58,8 +58,8 @@
         const t2 = parse_xyz(p2.textContent);
         const dirs = absDirections({x: t1[1], y: t1[2], z: t1[3]}, {x: t2[1], y: t2[2], z: t2[3]});
         const bs = "&nbsp;&nbsp;&nbsp;"; // big HTML space
-        const tooltip = `Horizontal: ${dirs.h == null ? '-' : dirs.h}º\nVertical: ${dirs.v}º`;
-        const dir = (dirs.h != null) ? `${dirs.arrow} (${dirs.compass}, ${dirs.clock}°)` : (dirs.v > 0) ? '(UP)' : (dirs.v < 0) ? '(DOWN)' : '-';
+        const tooltip = `Horizontal: ${dirs.h == null ? '-' : Math.round(dirs.h)}º\nVertical: ${Math.round(dirs.v)}º`;
+        const dir = (dirs.h != null) ? `${dirs.arrow} (${dirs.clock} ')` : (dirs.v > 0) ? '(UP)' : (dirs.v < 0) ? '(DOWN)' : '-';
         const elem = document.createElement('span');
         elem.innerHTML = `${bs}<span style="font-size: larger" title="${tooltip}">${dir}</span>`;
         elem.style.color = "yellow";
