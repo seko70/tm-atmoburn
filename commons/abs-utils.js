@@ -1,4 +1,4 @@
-/* abs-utils - common utility functions without dependencies, shared by several scripts; version 1.2.1 */
+/* abs-utils - common utility functions without dependencies, shared by several scripts; version 1.2.2 */
 (function (global) {
     'use strict';
 
@@ -37,7 +37,7 @@
             const dy = p2.y - p1.y;
             if (dx === 0 && dy === 0) return null; // no direction
             const deg = rad2deg(Math.atan2(-dy, dx)) + 90;
-            return Math.abs(deg < 0 ? deg + 360 : deg);
+            return Math.round(Math.abs(deg < 0 ? deg + 360 : deg));
         }
 
         // return vertical direction, in degrees (-90,90)
