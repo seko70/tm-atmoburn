@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Archivist
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.17.0
+// @version      0.19.0
 // @description  Parses and stores various entities while browsing AtmoBurn; see Tampermonkey menu for some actions; see abs-awacs for in-game UI
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
@@ -18,8 +18,8 @@
 // @match        https://*.atmoburn.com/sensor_net.php*
 // @run-at       document-end
 // @require      https://cdn.jsdelivr.net/npm/dexie@4.2.1/dist/dexie.min.js
-// @require      https://github.com/seko70/tm-atmoburn/raw/refs/tags/commons/abs-utils/v1.2.1/commons/abs-utils.js
-// @require      https://github.com/seko70/tm-atmoburn/raw/refs/tags/commons/atmoburn-service-db/v1.1.1/commons/atmoburn-service-db.js
+// @require      https://github.com/seko70/tm-atmoburn/raw/refs/tags/commons/abs-utils/v1.2.2/commons/abs-utils.js
+// @require      https://github.com/seko70/tm-atmoburn/raw/refs/tags/commons/atmoburn-service-db/v1.2.0/commons/atmoburn-service-db.js
 // @grant        GM_registerMenuCommand
 // @grant        GM_notification
 // @grant        unsafeWindow
@@ -35,8 +35,6 @@
 (function () {
     'use strict';
 
-    const DEBUG = true;
-
     // refpoint; exported for use in other scripts as well
     unsafeWindow.refPoint = {x: 0, y: 0, z: 0, name: "Center-of-the-Universe"};
 
@@ -51,6 +49,7 @@
         rp: ['id', 'name', 'x', 'y', 'z', 'relation', 'type', 'comment', 'ts', 'src'],
         wh: ['id', 'name', 'system', 'x', 'y', 'z', 'tsystem', 'tx', 'ty', 'tz', 'comment', 'ts', 'src'],
         signature: ['id', 'name', 'x', 'y', 'z', 'system', 'world', 'colony', 'player', 'faction', 'relation', 'location', 'speed', 'ships', 'tonnage', 'roster', 'ts', 'src'],
+        outpost: ['id', 'name', 'x', 'y', 'z', 'system', 'world', 'colony', 'player', 'relation', 'location', 'ts', 'src'],
         relation: ['id', 'relation', `ts`, 'src'],
     };
 
@@ -100,7 +99,6 @@
 
     // just log the message to console, with script name as a prefix
     function xdebug(msg, ...data) {
-        if (!DEBUG) return;
         console.debug('ARCH', msg, ...data);
     }
 
@@ -112,6 +110,20 @@
     // same as xlog, but as a warning
     function xerror(msg, ...err) {
         console.warn('ARCH', msg, ...err);
+    }
+
+    function hash32(str) {
+        let h = 0x811c9dc5; // FNV-ish start
+        for (let i = 0; i < str.length; i++) {
+            h ^= str.charCodeAt(i);
+            h = Math.imul(h, 0x01000193); // 16777619
+        }
+        return h >>> 0; // unsigned 32-bit
+    }
+
+    function syntheticId(s, prefix = null) {
+        const tmpId = hash32(s).toString(36).padStart(8, '0').slice(0, 8);
+        return (prefix) ? `${prefix}${tmpId}` : tmpId;
     }
 
     // removes eventual tags (see abs-tag-manager)
@@ -419,31 +431,29 @@
         return w;
     }
 
-    // async job to clean old/expired/dead fleets, signatures and duplicates in general; heuristic is used, be warned!
-    async function fleetCleanup() {
-        const RESERVE_MS = 3 * 60 * 1000;
+    // async job to clean duplicate signatures (heuristics ahead!)
+    async function signatureCleanup() {
 
         async function _processSignature(sig) {
-            // 1. check for fleets with same signature
+            // check for fleets with same signature first...
             let matchingFleet = await db.fleet.where('signature').equals(sig.id).first();
-            if (matchingFleet) {
-                // TODO update fleet if signature has newer info
-                xdebug("Signature can be deleted - same signature fleet(s) found", sig, matchingFleet)
-                return true; // we don't need this signature anymore - there are fleet recorded
+            if (!matchingFleet) {
+                // ... and then check for fleets with same name, player and position
+                matchingFleet = await db.fleet.where('name').equals(sig.name).filter(
+                    f => f.player === sig.player && f.x === sig.x && f.y === sig.y && f.z === sig.z
+                ).first();
             }
-            // 2. check for fleets with same name/position/player and with the same update time (approx)
-            matchingFleet = await db.fleet.where('name').equals(sig.name).filter(
-                f => f.player === sig.player && f.x === sig.x && f.y === sig.y && f.z === sig.z && Math.abs(f.ts - sig.ts) < RESERVE_MS
-            ).first();
             if (matchingFleet) {
-                // TODO update fleet if signature has newer info
-                xdebug("Signature can be deleted - matchnich fleet(s) found", sig, matchingFleet)
-                return true; // we don't need this signature anymore - there are fleet recorded
+                if (isOlderThan(matchingFleet.ts, sig.ts, 3600)) {
+                    safeCopy(matchingFleet, ['system', 'world', 'x', 'y', 'z', 'location'], sig);
+                    await ADB.update(matchingFleet);
+                }
+                xdebug("Signature can be deleted - matching fleet(s) found", sig, matchingFleet)
+                return true; // we don't need this signature anymore - there is a fleet recorded
             }
             return false;
         }
 
-        console.info("fleetCleanup started");
         // phase 1 - readonly scan, collecting IDs for delete
         const idsToDelete = [];
         const allSignatures = await db.signature.toArray();
@@ -456,8 +466,8 @@
         // phase 2 - delete expired/duplicate signatures
         if (idsToDelete.length > 0) {
             await db.signature.bulkDelete(idsToDelete);
+            console.info("signatureCleanup completed, deleted signatures: " + idsToDelete.length);
         }
-        console.info("fleetCleanup completed, deleted signatures: " + idsToDelete.length);
     }
 
     // === Parser ====
@@ -511,7 +521,6 @@
                 colonies.push(c);
             });
             assert(colonies.length > 0, "No colonies in colony list?");
-            //xdebug("Colony list parsed OK", colonies);
             return colonies;
         },
 
@@ -528,9 +537,83 @@
                 fleets.push(f);
             });
             assert(fleets.length > 0, "No fleets in fleet list?");
-            //xdebug("Fleet list parsed OK", fleets);
             return fleets;
         },
+
+        // Parse fuel bunker (colonies and fleets)
+        parseFuelBunker: function () {
+            const objects = [];
+            let obj = null;
+
+            function _parseFuelBunkerRecords(row) {
+                const links = row.querySelectorAll('a[href*="/fleet.php?fleet="]');
+                if (links && links.length > 0) {
+                    obj = {ts: now, src: Source.FUEL_BUNKER};
+                    if (links.length === 3) {
+                        // colony or world level barge/outpost, for example:
+                        //   https://beta7.atmoburn.com/fleet.php?fleet=4636&tcolony=123
+                        //   https://beta7.atmoburn.com/fleet.php?fleet=4636&tworld=123
+                        const [olink, wlink, slink] = links;
+                        if (Parsing.parseInfoFromLink(olink, /tcolony=(\d+)/, obj, 'id', 'name')) {
+                            obj.type = "colony";
+                        } else if (Parsing.parseInfoFromLink(olink, /tworld=(\d+)/, obj, 'id', 'name')) {
+                            obj.id = syntheticId(`${obj.id}.${obj.name}`, 'w#');
+                            obj.type = "outpost";
+                        }
+                        if (obj.id) {
+                            Parsing.parseInfoFromLink(wlink, /tworld=(\d+)/, obj, 'world', 'worldName');
+                            Parsing.parseInfoFromLink(slink, /tsystem=(\d+)/, obj, 'system', 'systemName');
+                        }
+                    } else if (links.length === 2) {
+                        // system level outpost/barge, for example:
+                        //   https://beta7.atmoburn.com/fleet.php?fleet=574&tsystem=165&x=0&y=40&z=10&tpos=local
+                        const [olink, slink] = links;
+                        if (Parsing.parseInfoFromLink(olink, /tsystem=(\d+)/, obj, 'id', 'name')) {
+                            obj.id = syntheticId(`${obj.id}.${obj.name}`, 's#');
+                            obj.type = "outpost";
+                        }
+                        if (obj.id) {
+                            Parsing.parseInfoFromLink(slink, /tsystem=(\d+)/, obj, 'system', 'systemName');
+                        }
+                    } else if (links.length === 1) {
+                        // global level outpost/barge, for example:
+                        //   https://beta7.atmoburn.com/fleet.php?fleet=62&x=-4811&y=-4101&z=4492&tpos=global
+                        const olink = links[0];
+                        if (Parsing.parseGlobalInfoFromLink(olink, obj, 'x', 'y', 'z')) {
+                            obj.name = stripTags(Parsing.textContent(olink));
+                            obj.id = syntheticId(`${obj.x}.${obj.y}.${obj.z}.${obj.name}`, 'g#');
+                            obj.type = "outpost";
+                        }
+                    }
+                    if (!obj.id) {
+                        obj = null;
+                        xdebug('parseFuelBunker - unknown record type', row.outerHTML);
+                    }
+                } else if (obj) {
+                    // second row - append info to record
+                    const plink = row.querySelector('a[href*="/message.php?player="]');
+                    assert(plink);
+                    obj.player = Parsing.textContent(plink);
+                    obj.location = obj['worldName'] || obj['systemName'];
+                    objects.push(obj);
+                    obj = null;
+                }
+            }
+
+            const rows = document.querySelectorAll("body > div > div > div > table > tbody > tr");
+            if (rows) {
+                for (const row of rows) {
+                    try {
+                        _parseFuelBunkerRecords(row);
+                    } catch (e) {
+                        notify('ARCH - parseFuelBunker', e.message);
+                        obj = null;
+                    }
+                }
+            }
+            return objects;
+        }
+
     }
 
 
@@ -591,7 +674,10 @@
         },
         parseGlobalInfoFromLink: function (link, obj, xAttr, yAttr, zAttr) {
             if (!link) return false;
-            const m = (link.href || link.getAttribute('onClick'))?.match(XYZ_URL_REGEX);
+            const ref = link.href || link.getAttribute('onClick');
+            if (!ref) return false;
+            if (ref.includes('tpos=') && !ref.includes('tpos=global')) return false;
+            const m = ref.match(XYZ_URL_REGEX);
             if (!m) return false;
             [obj[xAttr], obj[yAttr], obj[zAttr]] = [Number(m[1]), Number(m[2]), Number(m[3])];
             return true;
@@ -645,6 +731,12 @@
         },
         sanitizeSignature: function (s) {
             Parsing.sanitizeFleet(s); // for now it is the same as fleet (except "signature" an "id" fields)
+        },
+        sanitizeOutpost: function (f) {
+            f.name = useDefault(stripTags(f.name));
+            Parsing.fixRelation(f);
+            Parsing.fixUndefined(f);
+            Parsing.setDefaultsIfNotDefined(f, {colony: null, world: null, system: null, x: null, y: null, z: null});
         },
         sanitizeColony: function (c) {
             c.name = useDefault(stripTags(c.name));
@@ -932,48 +1024,27 @@
     }
 
     async function parseFuelBunker() {
-
-        async function _parseFuelBunkerColonies(row) {
-            const clink = row.querySelector('a[href*="/fleet.php?fleet="][href*="&tcolony="]');
-            if (clink) {
-                // starting row - parse colony id and name out of link
-                colony = {ts: now, src: Source.FUEL_BUNKER};
-                const parsed = Parsing.parseInfoFromLink(clink, /tcolony=(\d+)/, colony, 'id', 'name');
-                assert(parsed, 'No colony info in link ' + clink.outerHTML);
-                assert(colony.id);
-                const wlink = row.querySelector('a[href*="/fleet.php"][href*="tworld="]');
-                assert(wlink);
-                Parsing.parseInfoFromLink(wlink, /tworld=(\d+)/, colony, 'world', 'worldName');
-                // parse system
-                const slink = row.querySelector('a[href*="/fleet.php"][href*="tsystem="]');
-                assert(slink);
-                Parsing.parseInfoFromLink(slink, /tsystem=(\d+)/, colony, 'system', 'systemName');
-            } else if (colony) {
-                // second row - append info to record
-                const plink = row.querySelector('a[href*="/message.php?player="]');
-                assert(plink);
-                colony.player = Parsing.textContent(plink); // add player info
-                const s = await fetchSystemInfo(colony.system);
-                copyXYZ(colony, s);
-                colony.location = colony['worldName'] || colony['systemName'];
-                Parsing.sanitizeColony(colony);
-                await ADB.store('colony', colony);
-                colony = null;
+        const objects = PureParser.parseFuelBunker();
+        const colonies = [];
+        const outposts = [];
+        for (const obj of objects) {
+            if (obj.player === Parsing.parsePlayerName()) continue; // skip my colonies and fleets
+            if (obj.system) {
+                const s = await fetchSystemInfo(obj.system);
+                copyXYZ(obj, s);
+            }
+            if (obj.type === 'colony') {
+                Parsing.sanitizeColony(obj);
+                colonies.push(obj);
+            } else if (obj.type === 'outpost') {
+                Parsing.sanitizeOutpost(obj);
+                outposts.push(obj);
+            } else {
+                xerror('parseFuelBunker - unknown record type', obj);
             }
         }
-
-        let colony = null;
-        const rows = document.querySelectorAll("body > div > div > div > table > tbody > tr");
-        if (rows) {
-            for (const row of rows) {
-                try {
-                    await _parseFuelBunkerColonies(row);
-                } catch (e) {
-                    notify('ARCH - parseFuelBunker', e.message);
-                    colony = null;
-                }
-            }
-        }
+        await ADB.bulkStore('colony', colonies);
+        await ADB.bulkStore('outpost', outposts);
     }
 
     async function parseRallyPoints() {
@@ -1123,11 +1194,11 @@
     (async () => {
         try {
             const urlstr = document.URL;
-            //xdebug(`In DEBUG mode for url=${urlstr}`);
+            //xdebug(`Processing url=${urlstr}`);
             if (urlstr.match(/atmoburn\.com\/overview\.php\?view=2/i)) {
                 xlog(`Fleet Overview: ${urlstr}`);
                 setTimeout(safeAsync(parseMyFleetsOverview), 100);
-                setTimeout(safeAsync(fleetCleanup), 1000);
+                setTimeout(safeAsync(signatureCleanup), 1000);
             } else if (urlstr.match(/atmoburn\.com\/fleet\.php/i) || urlstr.match(/atmoburn\.com\/fleet\//i)) {
                 xlog(`Fleet: ${urlstr}`);
                 setTimeout(safeAsync(parseFleetScreen), 500);
@@ -1142,6 +1213,7 @@
             } else if (urlstr.match(/atmoburn\.com\/extras\/scan.php/i)) {
                 xlog(`Scan: ${urlstr}`);
                 setTimeout(safeAsync(parseScan), 500);
+                setTimeout(safeAsync(signatureCleanup), 1000);
             } else if (urlstr.match(/atmoburn\.com\/extras\/fleet_refuel_info.php/i)) {
                 xlog(`Fuel Bunker: ${urlstr}`);
                 setTimeout(safeAsync(parseFuelBunker), 500);
@@ -1151,6 +1223,7 @@
             } else if (urlstr.match(/atmoburn\.com\/sensor_net\.php/i)) {
                 xlog(`Sensor Net: ${urlstr}`);
                 setTimeout(safeAsync(parseSensorNet), 200);
+                setTimeout(safeAsync(signatureCleanup), 1000);
             }
         } catch (e) {
             notify('ARCH', e.message);
