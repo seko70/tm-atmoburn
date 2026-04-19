@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Archivist
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.19.1
+// @version      0.20.0
 // @description  Parses and stores various entities while browsing AtmoBurn; see Tampermonkey menu for some actions; see abs-awacs for in-game UI
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
@@ -36,7 +36,7 @@
     'use strict';
 
     // refpoint; exported for use in other scripts as well
-    unsafeWindow.refPoint = {x: 0, y: 0, z: 0, name: "Center-of-the-Universe"};
+    unsafeWindow.refPoint = {x: 0, y: 0, z: 0, name: "Center-of-the-Universe", range: null, maxRange: null};
 
     // --- Dexie DB
     const db = window.sharedDB;
@@ -185,8 +185,7 @@
         const r = unsafeWindow.refPoint;
         if (obj) {
             copyXYZ(r, obj);
-            r.name = useDefault(name, obj.name);
-            r.fid = fid;
+            [r.name, r.fid, r.range, r.maxRange] = [useDefault(name, obj.name), fid, obj.range, obj.maxRange];
         } else {
             [r.x, r.y, r.z, r.name, r.fid] = [0, 0, 0, name ? name : "Center-Of-The-Universe", fid];
         }
@@ -506,6 +505,42 @@
             colony.population = safeInteger(Parsing.getTextAfterPrefix(colonydropdown, 'Population:'));
             colony.size = safeInteger(Parsing.getTextAfterPrefix(colonydropdown, 'Size:'));
             return colony;
+        },
+
+        // Parse some fleet metadata from (current) fleet screen; ; we assume it is "my" fleet; returns fleet:
+        // {id,name,player,relation,colony,colonyName,world,worldName,system,systemName}
+        parseFleetScreen: function () {
+            // parse fleet ID from URL
+            const fid = Parsing.parseFleetIdFromURL();
+            if (!fid) return; // No fleet ID in page URL means there is no info to parse
+            // retrieve fleet info or create new one
+            let fleet = {id: fid, ts: now, relation: Relation.MY, src: Source.FLEET_SCREEN};
+            // find navigation data panel
+            const navData = byId('navData');
+            if (!navData) return;
+            // parse fleet coordinates
+            Parsing.parseFleetCoordinates(navData, fleet);
+            // parse fleet location (colony, world, system) if present
+            const leftData = navData.querySelector('div#positionLeft');
+            leftData?.querySelectorAll('a[href]')?.forEach((link) => {
+                if (Parsing.parseColonyInfoFromLink(link, fleet, 'colony', 'colonyName')) return;
+                if (Parsing.parseWorldInfoFromLink(link, fleet, 'world', 'worldName')) return;
+                Parsing.parseSystemInfoFromLink(link, fleet, 'system', 'systemName');
+            });
+            fleet.location = fleet['colonyName'] || fleet['worldName'] || fleet['systemName'];
+            // check for confed/shared fleets
+            const shared = Parsing.textContent(byId('midcolumn').querySelector('div.subtext'));
+            if (shared && shared === 'Shared empire access') {
+                fleet.relation = Relation.Friend;
+                fleet.player = '(CONFED)';
+            }
+            // fleet name
+            fleet.name = stripTags(Parsing.textContent(byId('pageHeadLine')));
+            assert(fleet.name, `No name found for fleet #${fid}`);
+            // ranges
+            fleet.range = safeInteger(Parsing.textContent(byId('fleetRange')));
+            fleet.maxRange = safeInteger(Parsing.textContent(byId('fleetMaxRange')));
+            return fleet;
         },
 
         // Parse colony list form "Colonies" menu; returns list of {id,name,style}
@@ -840,54 +875,26 @@
     }
 
     async function parseFleetScreen() {
-        // parse fleet ID from URL
-        const fid = Parsing.parseFleetIdFromURL();
-        if (!fid) return; // No fleet ID in page URL means there is no info to parse
-        // retrieve fleet info or create new one
-        let fleet = {id: fid, ts: now, relation: Relation.MY, src: Source.FLEET_SCREEN};
-        // find navigation data panel
-        const navData = parent.document.getElementById('navData');
-        if (!navData) return;
-        // parse fleet coordinates
-        Parsing.parseFleetCoordinates(navData, fleet);
-        // parse fleet location (colony, world, system) if present
-        const leftData = navData.querySelector('div#positionLeft');
-        leftData?.querySelectorAll('a[href]')?.forEach((link) => {
-            if (Parsing.parseColonyInfoFromLink(link, fleet, 'colony', 'colonyName')) return;
-            if (Parsing.parseWorldInfoFromLink(link, fleet, 'world', 'worldName')) return;
-            Parsing.parseSystemInfoFromLink(link, fleet, 'system', 'systemName');
-        });
-        fleet.location = fleet['colonyName'] || fleet['worldName'] || fleet['systemName'];
-        // check for confed/shared fleets
-        const shared = Parsing.textContent(parent.document.getElementById('midcolumn').querySelector('div.subtext'));
-        if (shared && shared === 'Shared empire access') {
-            fleet.relation = Relation.Friend;
-            fleet.player = '(CONFED)';
-        }
-        // fleet name
-        fleet.name = useDefault(stripTags(Parsing.textContent(parent.document.getElementById('pageHeadLine'))));
-        setRefPoint(fleet, fid);
-
+        const fleet = PureParser.parseFleetScreen();
+        if (!fleet) return; // quit quietly - no fleet info is available
         // cache colony, world and system coordinates - eventually
         if (fleet.colony) await ADB.store('colony', createColonyFromFleet(fleet.colony, fleet));
         if (fleet.world) await ADB.store('world', createWorldFromFleet(fleet.world, fleet));
         if (fleet.system) await ADB.store('system', createSystemFromFleet(fleet.system, fleet));
-
+        // sanitize and store
         Parsing.sanitizeFleet(fleet);
+        setRefPoint(fleet, fleet.id);
         await ADB.store('fleet', fleet);
     }
 
     async function parseColonyScreen() {
         const colony = PureParser.parseColonyScreen();
         if (!colony) return; // quit quietly - no colony info is available
-        let c = await db.colony.get(colony.id);
-        if (c && c.x != null) {
-            [colony.x, colony.y, colony.z] = [c.x, c.y, c.z];
-        } else {
-            const w = await fetchWorldInfo(colony.world);
-            assert(w, `Can't fetch world #${colony.world}`);
-            [colony.x, colony.y, colony.z] = [w.x, w.y, w.z];
-        }
+        // determine global coordinates
+        const s = await fetchSystemInfo(colony.system);
+        assert(s, `Can't fetch system #${colony.system}`);
+        [colony.x, colony.y, colony.z] = [s.x, s.y, s.z];
+        // sanitize and store
         Parsing.sanitizeColony(colony);
         setRefPoint(colony);
         await ADB.store('colony', colony);
@@ -1114,6 +1121,7 @@
                         if (c) {
                             safeCopy(sig, ['location', 'colony', 'world', 'system', 'x', 'y', 'z'], c, ['name', 'id', 'world', 'system', 'x', 'y', 'z']);
                         } else {
+                            sig.location = loclink;
                             xerror(`Colony not found by name: ${loclink}`);
                         }
                     } else {

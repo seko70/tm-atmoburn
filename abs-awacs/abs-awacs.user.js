@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - AWACS
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.16.0
+// @version      0.17.0
 // @description  UI for abs-archivist - display nearest fleets, colonies, rally points in various contexts; uses data produced by abs-archivist
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
@@ -387,7 +387,7 @@ a.icon { text-decoration: none !important; }
             system: o.system,
             world: o.world,
             colony: o.colony,
-            dist: havePosition ? Math.round((absDistance(refPoint, o)) / 10_000) / 100 : null,
+            dist: havePosition ? absDistance(refPoint, o) : null,
             horiz: havePosition ? `${directions.arrow} ${directions.clock}'` : null,
             vert: havePosition ? `${directions.v}º` : null,
             ts: o.ts,
@@ -476,8 +476,12 @@ a.icon { text-decoration: none !important; }
     // Formatters
     const FMT = {
         FIXED2: function (cell, formatterParams, onRendered) {
-            const dist = cell.getValue()?.toFixed(2);
-            const color = dist < 0.5 ? MY_YELLOW : dist < 100.0 ? MY_GREEN : dist < 250.0 ? MY_RED : null;
+            const distkm = cell.getValue();
+            if (distkm == null) return null;
+            const dist = (Math.round(distkm / 10_000) / 100).toFixed(2);
+            if (!refPoint || refPoint.range == null) return dist;
+            if (distkm > refPoint.maxRange) return dist;
+            const color = distkm < 10_000 ? MY_YELLOW : distkm <= refPoint.range ? MY_GREEN : MY_RED;
             if (color) {
                 onRendered(function () {
                     cell.getElement().style.setProperty("color", color, "important");
