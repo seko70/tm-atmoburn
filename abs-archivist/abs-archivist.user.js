@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Archivist
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.19.0
+// @version      0.19.1
 // @description  Parses and stores various entities while browsing AtmoBurn; see Tampermonkey menu for some actions; see abs-awacs for in-game UI
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
@@ -446,7 +446,7 @@
             if (matchingFleet) {
                 if (isOlderThan(matchingFleet.ts, sig.ts, 3600)) {
                     safeCopy(matchingFleet, ['system', 'world', 'x', 'y', 'z', 'location'], sig);
-                    await ADB.update(matchingFleet);
+                    await ADB.store('fleet', matchingFleet);
                 }
                 xdebug("Signature can be deleted - matching fleet(s) found", sig, matchingFleet)
                 return true; // we don't need this signature anymore - there is a fleet recorded
