@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - AWACS
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.15.4
+// @version      0.16.0
 // @description  UI for abs-archivist - display nearest fleets, colonies, rally points in various contexts; uses data produced by abs-archivist
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
@@ -12,8 +12,8 @@
 // @match        https://*.atmoburn.com/view_colony.php*
 // @run-at       document-end
 // @require      https://cdn.jsdelivr.net/npm/dexie@4.2.1/dist/dexie.min.js
-// @require      https://github.com/seko70/tm-atmoburn/raw/refs/tags/commons/abs-utils/v1.2.1/commons/abs-utils.js
-// @require      https://github.com/seko70/tm-atmoburn/raw/refs/tags/commons/atmoburn-service-db/v1.1.1/commons/atmoburn-service-db.js
+// @require      https://github.com/seko70/tm-atmoburn/raw/refs/tags/commons/abs-utils/v1.2.2/commons/abs-utils.js
+// @require      https://github.com/seko70/tm-atmoburn/raw/refs/tags/commons/atmoburn-service-db/v1.2.0/commons/atmoburn-service-db.js
 // @resource     TABULATOR_JS  https://unpkg.com/tabulator-tables@6.3.1/dist/js/tabulator.min.js
 // @resource     TABULATOR_CSS https://unpkg.com/tabulator-tables@6.3.1/dist/css/tabulator_site_dark.min.css
 // @grant        GM_registerMenuCommand
@@ -57,7 +57,7 @@
     const RP_SUBTYPES = {'L': 'Location', 'C': 'Colony', 'F': 'Fleet', 'W': 'Wormhole', 'T': 'Target'};
 
     // icons for labels
-    const ICON = {Colony: "👥", Fleet: "🛰️", WH: "🌀", RP: "🧾", Navigate: "🧭", Launch: "🚀️", Reference: "👆", Edit: "🖉"};
+    const ICON = {Colony: "👥", Fleet: "🛰️", WH: "🌀", RP: "🧾", Navigate: "🧭", Launch: "🚀️", Reference: "👆", Edit: "🖉", Map: "🌌"};
 
     // window style
     const ABS_WINDOW_STYLE = `
@@ -314,6 +314,12 @@ a.icon { text-decoration: none !important; }
         return null;
     }
 
+    function _computeMapLink(objType, obj) {
+        if (!obj.id) return null;
+        const fleetLink = (refPoint && refPoint.fid) ? `&fleet=${refPoint.fid}` : '';
+        return `/extras/view_universe.php?x=${obj.x}&y=${obj.y}&z=${obj.z}${fleetLink}`;
+    }
+
     function _getTargetFleetUrlParams(o) {
         // example: tpos=colony&tsystem=123&x=3949&y=-1&z=-1
         const s = o.system ?? -1;
@@ -364,6 +370,7 @@ a.icon { text-decoration: none !important; }
             name: o.name,
             comment: _concatStrings(o.comment, o.location, _getSubtype(objType, o)),
             navigate: _computeNavigateLink(objType, o),
+            map: _computeMapLink(objType, o),
             launch: _computeLaunchLink(objType, o),
             player: o.player,
             faction: o.faction,
@@ -398,7 +405,10 @@ a.icon { text-decoration: none !important; }
             data.push(_fillFrom(Type.Fleet, ICON.Fleet, f));
         });
         await db.signature.each(s => {
-            data.push(_fillFrom(Type.Fleet, ICON.Fleet, {...s, id: null, signature: s.id}));
+            data.push(_fillFrom(Type.Fleet, ICON.Fleet, {...s, id: null, signature: s.id, comment: '(signature scan)'}));
+        });
+        await db.outpost.each(s => {
+            data.push(_fillFrom(Type.Fleet, ICON.Fleet, {...s, id: null, comment: '(outpost)'}));
         });
     }
 
@@ -523,6 +533,13 @@ a.icon { text-decoration: none !important; }
             const tooltip = `Open screen for '${r.name}'`;
             return `<a href="${r.navigate}" class="icon" target="maingame" title="${tooltip}">${ICON.Navigate}</a>`;
         },
+        MAP: function (cell, _formatterParams, _onRendered) {
+            const r = cell.getRow().getData();
+            if (!r.map) return null;
+            const tooltip = 'Open universe map';
+            // <a href="javascript:mapWin('/extras/view_universe.php?x=449345&amp;y=473179&amp;z=-102737&amp;fleet=4182');">449345, 473179, -102737 global</a>
+            return `<a href="${r.map}" class="icon" title="${tooltip}">${ICON.Map}</a>`;
+        },
         REF: function (cell, _formatterParams, _onRendered) {
             const r = cell.getRow().getData();
             if (r.x === null) return null;
@@ -585,6 +602,7 @@ a.icon { text-decoration: none !important; }
             {title: "Name", field: "name", headerFilter: true, minWidth: 130, formatter: FMT.NAME, tooltip: TT.NAME},
             {title: "Detail", field: "comment", headerFilter: true, minWidth: 70},
             {title: "", field: "navigate", minWidth: 20, width: 25, headerSort: false, formatter: FMT.NAV, headerTooltip: HTT.ACT},
+            {title: "", field: "map", minWidth: 20, width: 25, headerSort: false, formatter: FMT.MAP, headerTooltip: HTT.ACT},
             {title: "", field: "launch", minWidth: 20, width: 25, headerSort: false, formatter: FMT.LNC, headerTooltip: HTT.ACT},
             {title: "Player", field: "player", headerFilter: true, minWidth: 70, formatter: FMT.REF_COLOR_FG},
             {title: "Rel", field: "rel", headerFilter: true, width: 50, headerSort: false, formatter: FMT.REF_COLOR_FG, headerTooltip: HTT.REL},
