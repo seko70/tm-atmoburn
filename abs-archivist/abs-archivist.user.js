@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Archivist
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.20.0
+// @version      0.21.0
 // @description  Parses and stores various entities while browsing AtmoBurn; see Tampermonkey menu for some actions; see abs-awacs for in-game UI
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
@@ -325,10 +325,6 @@
         xdebug('Deleting my missing colonies', idsToDelete);
         await db.colony.bulkDelete(idsToDelete);
         return idsToDelete.length;
-    }
-
-    async function findColonyByName(name) {
-        return db.colony.where('name').equals(name).first();
     }
 
     async function deleteMissingFleets(myFleetList) { // delete all my fleets not on the list
@@ -1096,6 +1092,8 @@
             const sig = {id: lastWordOf(Parsing.textContent(divs0[0])), src: `${Source.SENSOR_NET}.${empiredb}`};
             assert(sig.id);
             sig.ts = parseInt(divs0[1].getAttribute("gametime")) * 1000;
+            const coords = divs0[2]?.querySelector(':scope > button')?.getAttribute('onclick')?.match(/"(.*)"/)[1]
+            if (coords) Parsing.parseXYZ(coords, sig);
             // second row
             const divs1 = divs[1].querySelectorAll(':scope > div');
             const divs10 = divs1[0].querySelectorAll(':scope > div');
@@ -1110,24 +1108,11 @@
             sig.tonnage = Parsing.textContent(divs110[1].querySelectorAll(':scope > div')[1]);
             sig.speed = firstWordOf(Parsing.textContent(divs110[3].querySelectorAll(':scope > div')[1]));
             const divs111 = divs11[1].querySelectorAll(':scope > div');
-            const loclink = last(divs111[0].querySelectorAll("span.fakeLink")) ?? Parsing.textContent(last(divs111[0].querySelectorAll("div")));
+            sig.location = Parsing.textContent(last(divs111[0].querySelectorAll("div")));
             // fourth row
             sig.roster = Array.from(divs[2].querySelectorAll(':scope > div')).map(x => Parsing.textContent(x)).join(",");
             // process the data
             if (sig.id && sig.name) {
-                if (loclink) {
-                    if (typeof loclink === 'string') {  // location is string, presumably colony name
-                        const c = await findColonyByName(loclink);
-                        if (c) {
-                            safeCopy(sig, ['location', 'colony', 'world', 'system', 'x', 'y', 'z'], c, ['name', 'id', 'world', 'system', 'x', 'y', 'z']);
-                        } else {
-                            sig.location = loclink;
-                            xerror(`Colony not found by name: ${loclink}`);
-                        }
-                    } else {
-                        Parsing.parseFleetLocationFromLink(sig, loclink);
-                    }
-                }
                 await enrichFleetLocation(sig);
                 Parsing.sanitizeSignature(sig)
                 signatures.push(sig);
