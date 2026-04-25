@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - AWACS
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.17.0
+// @version      0.18.0
 // @description  UI for abs-archivist - display nearest fleets, colonies, rally points in various contexts; uses data produced by abs-archivist
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
@@ -18,6 +18,7 @@
 // @resource     TABULATOR_CSS https://unpkg.com/tabulator-tables@6.3.1/dist/css/tabulator_site_dark.min.css
 // @grant        GM_registerMenuCommand
 // @grant        GM_getResourceText
+// @grant        GM_setClipboard
 // @grant        unsafeWindow
 // ==/UserScript==
 
@@ -57,7 +58,18 @@
     const RP_SUBTYPES = {'L': 'Location', 'C': 'Colony', 'F': 'Fleet', 'W': 'Wormhole', 'T': 'Target'};
 
     // icons for labels
-    const ICON = {Colony: "👥", Fleet: "🛰️", WH: "🌀", RP: "🧾", Navigate: "🧭", Launch: "🚀️", Reference: "👆", Edit: "🖉", Map: "🌌"};
+    const ICON = {Colony: "👥", Fleet: "🛰️", WH: "🌀", RP: "🧾", Navigate: "🧭", Launch: "🚀️", Reference: "👆", Edit: "🖉", Map: "🌌", Link: "🔗"};
+
+    // ui profile
+    const DIALOG_PROFILES = {
+        MY_COLS: {relFilter: 0, typeFilter: 0, colonies: 1, fleets: 0, rps: 0, whs: 0, rel: Relation.MY},
+        ALL_COLS: {relFilter: 1, typeFilter: 0, colonies: 1, fleets: 0, rps: 0, whs: 0},
+        MY_FLTS: {relFilter: 0, typeFilter: 0, colonies: 0, fleets: 1, rps: 0, whs: 0, rel: Relation.MY},
+        ALL_FLTS: {relFilter: 1, typeFilter: 0, colonies: 0, fleets: 1, rps: 0, whs: 0},
+        RPS: {relFilter: 0, typeFilter: 0, colonies: 0, fleets: 0, rps: 1, whs: 0},
+        WHS: {relFilter: 0, typeFilter: 0, colonies: 0, fleets: 0, rps: 0, whs: 1},
+        ALL: {relFilter: 1, typeFilter: 1, colonies: 1, fleets: 1, rps: 1, whs: 1},
+    }
 
     // window style
     const ABS_WINDOW_STYLE = `
@@ -76,6 +88,8 @@ a.icon { text-decoration: none !important; }
 .tabulator-row.tabulator-selectable:hover { background-color: ${MY_BLACK} !important; }
 .tabulator .tabulator-header .tabulator-col input, .tabulator .tabulator-header .tabulator-col select { background-color: ${DARK2} !important; }
 .tabulator-row,.tabulator-cell { cursor: default !important; }
+.tabulator-menu .tabulator-menu-item { font-size: 12px !important; background-color: ${DARK4}; color: #eeeeee !important; }
+.tabulator-menu .tabulator-menu-item:hover { color: ${MY_BLACK} !important; }
 .topline { display: flex; justify-content: center; align-items: center; background-color: ${DARK1} !important; padding: 4px 10px; }
 .toplineleft { margin-right: auto; }
 .toplineright {margin-left: auto; }
@@ -114,6 +128,9 @@ a.icon { text-decoration: none !important; }
 
     // --- AWACS ref point (lazy init)
     let refPoint = null;
+
+    // --- dialog profile (lazy init)
+    let dialogProfile = null;
 
     // --- Dexie DB
     const db = window.sharedDB;
@@ -164,64 +181,57 @@ a.icon { text-decoration: none !important; }
 
     function _modifyFilter(table, field, value, isOn) {
         const filterOp = isOn ? table.addFilter : table.removeFilter;
-        //const columnOp = isOn ? table.hideColumn : table.showColumn;
         filterOp(field, "!=", value);
-        if (field === 'type') {
-            if (value === Type.Colony) {
-                isOn ? table.hideColumn("pop") : table.showColumn("pop");
-                isOn ? table.hideColumn("size") : table.showColumn("size");
-            }
-            if (value === Type.Fleet) {
-                isOn ? table.hideColumn("sig") : table.showColumn("sig");
-                isOn ? table.hideColumn("ships") : table.showColumn("ships");
-                isOn ? table.hideColumn("tonnage") : table.showColumn("tonnage");
-            }
-        }
     }
 
     function _setButtonState(btn, state) {
         if (btn.classList.contains("on") !== state) btn.click();
     }
 
-    function _setupFilter(doc, table, elementId, field, value) {
+    function _setupFilter(doc, table, elementId, field, value, disable) {
         const btn = doc.getElementById(elementId);
-        if (btn) {
-            btn.addEventListener("click", (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                if (e.ctrlKey) {
-                    // set current button filter off
-                    _modifyFilter(table, field, value, false);
-                    // set all others buttons on (in the same group)
-                    const btnGroupId = {"rel": "filtersRel", "type": "filtersType"}[field];
-                    const btns = btnGroupId ? doc.getElementById(btnGroupId) : null;
-                    if (btns) {
-                        // modify filter for all buttons in the same group
-                        btns.querySelectorAll(".tg").forEach((ele) => {
-                            _setButtonState(ele, ele !== btn);
-                        });
-                    }
-                } else {
-                    btn.classList.toggle("on");
-                    _modifyFilter(table, field, value, btn.classList.contains("on"));
-                }
-            });
+        if (!btn) return;
+        if (disable) {
+            btn.style.visibility = 'hidden';
+            return;
         }
+        btn.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.ctrlKey) {
+                // set current button filter off
+                _modifyFilter(table, field, value, false);
+                // set all others buttons on (in the same group)
+                const btnGroupId = {"rel": "filtersRel", "type": "filtersType"}[field];
+                const btns = btnGroupId ? doc.getElementById(btnGroupId) : null;
+                if (btns) {
+                    // modify filter for all buttons in the same group
+                    btns.querySelectorAll(".tg").forEach((ele) => {
+                        _setButtonState(ele, ele !== btn);
+                    });
+                }
+            } else {
+                btn.classList.toggle("on");
+                _modifyFilter(table, field, value, btn.classList.contains("on"));
+            }
+        });
     }
 
     function setupGlobalFilters(doc, table) {
         // global filter
         //table.addFilter("dist", "<", 1000);
         // filter by relation
-        _setupFilter(doc, table, "cbfMe", "rel", Relation.MY);
-        _setupFilter(doc, table, "cbfFriend", "rel", Relation.Friend);
-        _setupFilter(doc, table, "cbfNeutral", "rel", Relation.Neutral);
-        _setupFilter(doc, table, "cbfEnemy", "rel", Relation.Enemy);
+        const relFilterDisabled = !dialogProfile.relFilter;
+        _setupFilter(doc, table, "cbfMe", "rel", Relation.MY, relFilterDisabled);
+        _setupFilter(doc, table, "cbfFriend", "rel", Relation.Friend, relFilterDisabled);
+        _setupFilter(doc, table, "cbfNeutral", "rel", Relation.Neutral, relFilterDisabled);
+        _setupFilter(doc, table, "cbfEnemy", "rel", Relation.Enemy, relFilterDisabled);
         // filter by type
-        _setupFilter(doc, table, "cbfColony", "type", Type.Colony);
-        _setupFilter(doc, table, "cbfFleet", "type", Type.Fleet);
-        _setupFilter(doc, table, "cbfRP", "type", Type.RP);
-        _setupFilter(doc, table, "cbfWH", "type", Type.WH);
+        const typeFilterDisabled = !dialogProfile.typeFilter;
+        _setupFilter(doc, table, "cbfColony", "type", Type.Colony, typeFilterDisabled);
+        _setupFilter(doc, table, "cbfFleet", "type", Type.Fleet, typeFilterDisabled);
+        _setupFilter(doc, table, "cbfRP", "type", Type.RP, typeFilterDisabled);
+        _setupFilter(doc, table, "cbfWH", "type", Type.WH, typeFilterDisabled);
     }
 
     async function setReferencePoint() {
@@ -314,29 +324,28 @@ a.icon { text-decoration: none !important; }
         return null;
     }
 
-    function _computeMapLink(objType, obj) {
-        if (!obj.id) return null;
+    function _computeMapLink(row) {
+        if (!row.id || row.x == null) return null;
         const fleetLink = (refPoint && refPoint.fid) ? `&fleet=${refPoint.fid}` : '';
-        return `/extras/view_universe.php?x=${obj.x}&y=${obj.y}&z=${obj.z}${fleetLink}`;
+        return `/extras/view_universe.php?x=${row.x}&y=${row.y}&z=${row.z}${fleetLink}`;
     }
 
     function _getTargetFleetUrlParams(o) {
         // example: tpos=colony&tsystem=123&x=3949&y=-1&z=-1
         const s = o.system ?? -1;
-        if (o.colony) return `tpos=colony&tsystem=${s}&x=${o.colony}&y=-1&z=-1&tfleet=${o.id}`;
+        if (o.id && o.colony) return `tpos=colony&tsystem=${s}&x=${o.colony}&y=-1&z=-1&tfleet=${o.id}`;
         if (o.world) return `tworld=${o.world}`;
         if (o.x === null) return null;
-        if (o.system) return `tpos=system&tsystem=${s}&x=${o.x}&y=${o.y}&z=${o.z}&tfleet=${o.id}`;
+        if (o.id && o.system) return `tpos=system&tsystem=${s}&x=${o.x}&y=${o.y}&z=${o.z}&tfleet=${o.id}`;
         return `tpos=global&x=${o.x}&y=${o.y}&z=${o.z}&tfleet=${o.id}`;
     }
 
     function _computeLaunchLink(objType, obj) {
         if (!refPoint.fid) return null;
-        if (!obj.id) return null;
         const isControlled = obj.relation === Relation.MY || obj.player === "(CONFED)";
         const isCivilGov = obj.player === 'Civil Goverment' || obj.player === 'Ghosts of the Past';
         if (objType === Type.Colony) {
-            if (isControlled || isCivilGov) return `/fleet.php?tcolony=${obj.id}&fleet=${refPoint.fid}`;
+            if (obj.id && (isControlled || isCivilGov)) return `/fleet.php?tcolony=${obj.id}&fleet=${refPoint.fid}`;
             if (obj.world) return `/fleet.php?tworld=${obj.world}&fleet=${refPoint.fid}`;
             if (obj.system) return `/fleet.php?tsystem=${obj.system}&fleet=${refPoint.fid}`;
             return null;
@@ -370,7 +379,6 @@ a.icon { text-decoration: none !important; }
             name: o.name,
             comment: _concatStrings(o.comment, o.location, _getSubtype(objType, o)),
             navigate: _computeNavigateLink(objType, o),
-            map: _computeMapLink(objType, o),
             launch: _computeLaunchLink(objType, o),
             player: o.player,
             faction: o.faction,
@@ -396,31 +404,39 @@ a.icon { text-decoration: none !important; }
 
     async function addAllColonies(data) {
         await db.colony.each(c => {
-            data.push(_fillFrom(Type.Colony, ICON.Colony, c));
+            if (!dialogProfile.rel || dialogProfile.rel === c.relation) {
+                data.push(_fillFrom(Type.Colony, ICON.Colony, c));
+            }
         });
     }
 
     async function addAllFleets(data) {
         await db.fleet.each(f => {
-            data.push(_fillFrom(Type.Fleet, ICON.Fleet, f));
+            if (!dialogProfile.rel || dialogProfile.rel === f.relation) {
+                data.push(_fillFrom(Type.Fleet, ICON.Fleet, f));
+            }
         });
-        await db.signature.each(s => {
-            data.push(_fillFrom(Type.Fleet, ICON.Fleet, {...s, id: null, signature: s.id, comment: '(signature scan)'}));
+        await db.signature.each(f => {
+            if (!dialogProfile.rel || dialogProfile.rel === f.relation) {
+                data.push(_fillFrom(Type.Fleet, ICON.Fleet, {...f, id: null, signature: f.id, comment: '(signature scan)'}));
+            }
         });
-        await db.outpost.each(s => {
-            data.push(_fillFrom(Type.Fleet, ICON.Fleet, {...s, id: null, comment: '(outpost)'}));
+        await db.outpost.each(f => {
+            if (!dialogProfile.rel || dialogProfile.rel === f.relation) {
+                data.push(_fillFrom(Type.Fleet, ICON.Fleet, {...f, id: null, comment: '(outpost)'}));
+            }
         });
     }
 
     async function addAllWormholes(data) {
-        await db.wh.each(f => {
-            data.push(_fillFrom(Type.WH, ICON.WH, f));
+        await db.wh.each(wh => {
+            data.push(_fillFrom(Type.WH, ICON.WH, wh));
         });
     }
 
     async function addAllRallyPoints(data) {
-        await db.rp.each(f => {
-            data.push(_fillFrom(Type.RP, ICON.RP, f));
+        await db.rp.each(rp => {
+            data.push(_fillFrom(Type.RP, ICON.RP, rp));
         });
     }
 
@@ -475,6 +491,7 @@ a.icon { text-decoration: none !important; }
 
     // Formatters
     const FMT = {
+        MENU: () => `<span style="cursor:pointer;">⋮</span>`,
         FIXED2: function (cell, formatterParams, onRendered) {
             const distkm = cell.getValue();
             if (distkm == null) return null;
@@ -531,31 +548,6 @@ a.icon { text-decoration: none !important; }
             }
             return `${r.icon} ${cell.getValue()}`;
         },
-        NAV: function (cell, _formatterParams, _onRendered) {
-            const r = cell.getRow().getData();
-            if (!r.navigate) return null;
-            const tooltip = `Open screen for '${r.name}'`;
-            return `<a href="${r.navigate}" class="icon" target="maingame" title="${tooltip}">${ICON.Navigate}</a>`;
-        },
-        MAP: function (cell, _formatterParams, _onRendered) {
-            const r = cell.getRow().getData();
-            if (!r.map) return null;
-            const tooltip = 'Open universe map';
-            // <a href="javascript:mapWin('/extras/view_universe.php?x=449345&amp;y=473179&amp;z=-102737&amp;fleet=4182');">449345, 473179, -102737 global</a>
-            return `<a href="${r.map}" class="icon" title="${tooltip}">${ICON.Map}</a>`;
-        },
-        REF: function (cell, _formatterParams, _onRendered) {
-            const r = cell.getRow().getData();
-            if (r.x === null) return null;
-            const tooltip = `Set '${r.name}' as Reference point`;
-            return `<span class="icon-btn" title="${tooltip}">${ICON.Reference}</span>`;
-        },
-        LNC: function (cell, _formatterParams, _onRendered) {
-            const r = cell.getRow().getData();
-            if (!r.launch) return null;
-            const tooltip = `Launch '${refPoint.name}' toward '${r.name}'`;
-            return `<a href="${r.launch}" class="icon" target="maingame" title="${tooltip}">${ICON.Launch}</a>`;
-        },
     }
 
     async function resetAwacsWindowInPlace() {
@@ -563,14 +555,52 @@ a.icon { text-decoration: none !important; }
         await initializeAwacsWindow(true);
     }
 
+    function setReferencePointTo(row) {
+        if (!row || row.x == null) return null;
+        [refPoint.x, refPoint.y, refPoint.z] = [row.x, row.y, row.z];
+        refPoint.name = row.name ?? "???";
+        refPoint.fid = (row.type === Type.Fleet && (row.rel === Relation.MY || row.player === "(CONFED)")) ? row.id : null;
+        resetAwacsWindowInPlace().catch(console.error);
+    }
+
     const CLCK = {
-        REF: async function (e, cell) {
-            const r = cell.getRow().getData();
-            if (r.x === null) return null;
-            [refPoint.x, refPoint.y, refPoint.z] = [r.x, r.y, r.z];
-            refPoint.name = r.name ?? "???";
-            refPoint.fid = (r.type === Type.Fleet && (r.rel === Relation.MY || r.player === "(CONFED)")) ? r.id : null;
-            await resetAwacsWindowInPlace();
+        MENU: function (e, cell) {
+            const row = cell.getRow().getData();
+            const actions = [];
+            // 'Navigate' menu item
+            if (row.navigate) {
+                actions.push({
+                    label: `<a href="${row.navigate}" class="icon" target="maingame">${ICON.Navigate} Open screen for ${row.name}</a>`,
+                });
+            }
+            // 'Map' menu item
+            const mapLink = _computeMapLink(row);
+            if (mapLink) {
+                actions.push({
+                    label: `<a href="${mapLink}" class="icon">${ICON.Map} Open universe map</a>`,
+                });
+            }
+            // 'Launch' menu item
+            if (row.launch) {
+                actions.push({
+                    label: `<a href="${row.launch}" class="icon" target="maingame">${ICON.Launch} Launch '${refPoint.name}' toward '${row.name}</a>`,
+                });
+            }
+            // 'Set reference point' menu item
+            if (row.x != null) {
+                actions.push({
+                    label: `<a href="#" class="icon">${ICON.Reference} Set '${row.name}' as Reference point</a>`,
+                    action: () => setReferencePointTo(row),
+                });
+            }
+            // 'Copy coords''
+            if (row.x != null) {
+                actions.push({
+                    label: `${ICON.Link} Copy coords`,
+                    action: () => GM_setClipboard(String(row.position), "text"),
+                });
+            }
+            return actions;
         },
     }
 
@@ -594,32 +624,34 @@ a.icon { text-decoration: none !important; }
         };
         // collect/compute/process data
         const data = [];
-        await addAllColonies(data);
-        await addAllFleets(data);
-        await addAllWormholes(data);
-        await addAllRallyPoints(data);
-        // setup columns
-        const columns = [
+        if (dialogProfile.colonies) await addAllColonies(data);
+        if (dialogProfile.fleets) await addAllFleets(data);
+        if (dialogProfile.rps) await addAllRallyPoints(data);
+        if (dialogProfile.whs) await addAllWormholes(data);
+        // define columns
+        let columns = [
             {title: "#", formatter: "rownum", width: 40, hozAlign: "center", headerSort: false},
             {title: "ID", field: "id", headerFilter: true, width: 60, headerTooltip: HTT.ID},
             {title: "Sig", field: "sig", headerFilter: true, width: 60, headerTooltip: HTT.SIG},
             {title: "Name", field: "name", headerFilter: true, minWidth: 130, formatter: FMT.NAME, tooltip: TT.NAME},
             {title: "Detail", field: "comment", headerFilter: true, minWidth: 70},
-            {title: "", field: "navigate", minWidth: 20, width: 25, headerSort: false, formatter: FMT.NAV, headerTooltip: HTT.ACT},
-            {title: "", field: "map", minWidth: 20, width: 25, headerSort: false, formatter: FMT.MAP, headerTooltip: HTT.ACT},
-            {title: "", field: "launch", minWidth: 20, width: 25, headerSort: false, formatter: FMT.LNC, headerTooltip: HTT.ACT},
+            {title: "", field: "actions", minWidth: 20, width: 25, hozAlign: "center", headerSort: false, formatter: FMT.MENU, clickMenu: CLCK.MENU},
             {title: "Player", field: "player", headerFilter: true, minWidth: 70, formatter: FMT.REF_COLOR_FG},
             {title: "Rel", field: "rel", headerFilter: true, width: 50, headerSort: false, formatter: FMT.REF_COLOR_FG, headerTooltip: HTT.REL},
             {title: "Position", field: "position", headerFilter: true, minWidth: 40, maxWidth: 200, hozAlign: "right", tooltip: TT.REL},
             {title: "Dist", field: "dist", hozAlign: "right", width: 70, sorter: "number", headerTooltip: HTT.DIST, formatter: FMT.FIXED2},
             {title: "Dir", field: "horiz", hozAlign: "right", headerFilter: true, width: 50, headerSort: false, headerTooltip: HTT.DIR, tooltip: TT.DIR},
-            {title: "", field: "ref", minWidth: 20, width: 20, headerSort: false, formatter: FMT.REF, headerTooltip: HTT.ACT, cellClick: CLCK.REF},
             {title: "Pop", field: "pop", hozAlign: "right", width: 60, sorter: "number"},
             {title: "Size", field: "size", hozAlign: "right", width: 60, sorter: "number"},
             {title: "Ships", field: "ships", hozAlign: "right", width: 65, sorter: "number", tooltip: TT.SIZE},
             {title: "Tons", field: "tonnage", hozAlign: "right", width: 60, sorter: "number"},
             {title: "Updated", field: "ts", headerSort: false, minWidth: 70, maxWidth: 120, formatter: FMT.TS, tooltip: TT.UPDATED}
         ];
+        // remove columns if not appropriate
+        if (!dialogProfile.colonies) columns = columns.filter(c => !["pop", "size"].includes(c.field));
+        if (!dialogProfile.fleets) columns = columns.filter(c => !["sig", "ships", "tonnage"].includes(c.field));
+        if (!dialogProfile.fleets && !dialogProfile.colonies) columns = columns.filter(c => !["player", "id"].includes(c.field));
+        // create table
         try {
             return await buildTabulatorInPopup({
                 title: `AtmoBurn-AWACS: ${refPoint.name}`,
@@ -631,24 +663,15 @@ a.icon { text-decoration: none !important; }
         }
     }
 
-    function _presetFilters(presetFilters) {
-        if (presetFilters) {
-            for (const [btnName, state] of Object.entries(presetFilters)) {
-                const btn = awacsWin.document.getElementById(btnName);
-                if (btn) _setButtonState(btn, state);
-            }
-        }
-    }
-
     function csvDelimiterByLocale() {
         // If decimal separator is "," then CSV delimiter is (almost always) ";"
         const number = 1.1;
         return number.toLocaleString().includes(",") ? ";" : ",";
     }
 
-    async function showAllStuffDialog(presetFilters) {
+    async function showAllStuffDialog(newDialogProfile) {
+        dialogProfile = newDialogProfile;
         if (awacsWin && !awacsWin.closed) {
-            _presetFilters(presetFilters);
             awacsWin.focus();
         } else {
             awacsWin = window.open("", WINDOW_NAME, FEATURES);
@@ -663,12 +686,7 @@ a.icon { text-decoration: none !important; }
             awacsWin.document.open();
             awacsWin.document.write(LOADING_HTML);
             awacsWin.document.close();
-            const table = await initializeAwacsWindow()
-            if (table && presetFilters) {
-                table.on("tableBuilt", function () {
-                    _presetFilters(presetFilters);
-                });
-            }
+            const table = await initializeAwacsWindow(false)
             if (table) {
                 awacsWin.document.getElementById("exportCSV").addEventListener('click', function () {
                     exportToCSV(table);
@@ -677,46 +695,32 @@ a.icon { text-decoration: none !important; }
         }
     }
 
-    async function showMyColoniesDialog() {
-        return showAllStuffDialog({
-            cbfMe: false, cbfFriend: true, cbfNeutral: true, cbfEnemy: true, cbfColony: false, cbfFleet: true, cbfRP: true, cbfWH: true
-        });
+    function showMyColoniesDialog() {
+        return showAllStuffDialog(DIALOG_PROFILES.MY_COLS);
     }
 
-    async function showAllColoniesDialog() {
-        return showAllStuffDialog({
-            cbfMe: false, cbfFriend: false, cbfNeutral: false, cbfEnemy: false, cbfColony: false, cbfFleet: true, cbfRP: true, cbfWH: true
-        });
+    function showAllColoniesDialog() {
+        return showAllStuffDialog(DIALOG_PROFILES.ALL_COLS);
     }
 
-    async function showMyFleetsDialog() {
-        return showAllStuffDialog({
-            cbfMe: false, cbfFriend: true, cbfNeutral: true, cbfEnemy: true, cbfColony: true, cbfFleet: false, cbfRP: true, cbfWH: true,
-        });
+    function showMyFleetsDialog() {
+        return showAllStuffDialog(DIALOG_PROFILES.MY_FLTS);
     }
 
-    async function showAllFleetsDialog() {
-        return showAllStuffDialog({
-            cbfMe: false, cbfFriend: false, cbfNeutral: false, cbfEnemy: false, cbfColony: true, cbfFleet: false, cbfRP: true, cbfWH: true,
-        });
+    function showAllFleetsDialog() {
+        return showAllStuffDialog(DIALOG_PROFILES.ALL_FLTS);
     }
 
-    async function showRallyPointsDialog() {
-        return showAllStuffDialog({
-            cbfMe: false, cbfFriend: false, cbfNeutral: false, cbfEnemy: false, cbfColony: true, cbfFleet: true, cbfRP: false, cbfWH: true,
-        });
+    function showRallyPointsDialog() {
+        return showAllStuffDialog(DIALOG_PROFILES.RPS);
     }
 
-    async function showWormholesDialog() {
-        return showAllStuffDialog({
-            cbfMe: false, cbfFriend: false, cbfNeutral: false, cbfEnemy: false, cbfColony: true, cbfFleet: true, cbfRP: true, cbfWH: false
-        });
+    function showWormholesDialog() {
+        return showAllStuffDialog(DIALOG_PROFILES.WHS);
     }
 
-    async function showAllDialog() {
-        return showAllStuffDialog({
-            cbfMe: false, cbfFriend: false, cbfNeutral: false, cbfEnemy: false, cbfColony: false, cbfFleet: false, cbfRP: false, cbfWH: false
-        });
+    function showAllDialog() {
+        return showAllStuffDialog(DIALOG_PROFILES.ALL);
     }
 
     function createMenu(topmenu) {
@@ -755,4 +759,5 @@ a.icon { text-decoration: none !important; }
         }
     })();
 
-})();
+})
+();
