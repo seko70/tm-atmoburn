@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Archivist
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.21.0
+// @version      0.21.1
 // @description  Parses and stores various entities while browsing AtmoBurn; see Tampermonkey menu for some actions; see abs-awacs for in-game UI
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
@@ -758,7 +758,7 @@
             if (typeof f.tonnage != 'number') f.tonnage = safeFloat(f.tonnage);
             if (!f.roster || !f.roster.length || f.roster === '""') f.roster = null;
             Parsing.fixUndefined(f);
-            Parsing.setDefaultsIfNotDefined(f, {colony: null, world: null, system: null, x: null, y: null, z: null});
+            Parsing.setDefaultsIfNotDefined(f, {colony: null, world: null, system: null, x: null, y: null, z: null, location: null});
         },
         sanitizeSignature: function (s) {
             Parsing.sanitizeFleet(s); // for now it is the same as fleet (except "signature" an "id" fields)
