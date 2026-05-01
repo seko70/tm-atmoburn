@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - AWACS
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.18.0
+// @version      0.19.1
 // @description  UI for abs-archivist - display nearest fleets, colonies, rally points in various contexts; uses data produced by abs-archivist
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
@@ -10,7 +10,6 @@
 // @match        https://*.atmoburn.com/fleet.php?*
 // @match        https://*.atmoburn.com/fleet/*
 // @match        https://*.atmoburn.com/view_colony.php*
-// @run-at       document-end
 // @require      https://cdn.jsdelivr.net/npm/dexie@4.2.1/dist/dexie.min.js
 // @require      https://github.com/seko70/tm-atmoburn/raw/refs/tags/commons/abs-utils/v1.2.2/commons/abs-utils.js
 // @require      https://github.com/seko70/tm-atmoburn/raw/refs/tags/commons/atmoburn-service-db/v1.2.0/commons/atmoburn-service-db.js
@@ -28,7 +27,6 @@
 // @ts-check
 /// <reference types="tabulator-tables" />
 /* global Tabulator */
-
 
 // main function/definition/script
 (function () {
@@ -58,7 +56,7 @@
     const RP_SUBTYPES = {'L': 'Location', 'C': 'Colony', 'F': 'Fleet', 'W': 'Wormhole', 'T': 'Target'};
 
     // icons for labels
-    const ICON = {Colony: "👥", Fleet: "🛰️", WH: "🌀", RP: "🧾", Navigate: "🧭", Launch: "🚀️", Reference: "👆", Edit: "🖉", Map: "🌌", Link: "🔗"};
+    const ICON = {Colony: "👥", Fleet: "🛰️", WH: "🌀", RP: "🧾", Navigate: "🧭", Launch: "🚀️", Reference: "👆", Edit: "🖉", Map: "🌌", Link: "🔗", Path: "⚓"};
 
     // ui profile
     const DIALOG_PROFILES = {
@@ -148,6 +146,11 @@ a.icon { text-decoration: none !important; }
     // same as xlog, but as a warning
     function xerror(msg, ...err) {
         console.warn('AWACS', msg, ...err);
+    }
+
+    // round to 2 decimal points
+    function round2(x) {
+        return Math.round(100 * x) / 100;
     }
 
     // Inject Tabulator from @resource into the POPUP so it’s evaluated in win
@@ -563,6 +566,120 @@ a.icon { text-decoration: none !important; }
         resetAwacsWindowInPlace().catch(console.error);
     }
 
+    /**
+     * Find shortes path from system "startId" to system "endId", using "wormholes". Input param formats:
+     */
+    async function findShortestPath(row) {
+
+        function _determineSteps(systemMap, wormholes, pathResult) {
+            const wormholesBySystemId = new Map(wormholes.map(w => [w.system, {name: w.name, from: w.system, to: w.tsystem}]));
+            const localSystemDistance = 500; // approx; distance from system entrance and wormhole and/or vice-versa
+            let last = null;
+            let lastWh = null;
+            let sum = 0;
+            let stepNumber = 0;
+            pathResult.steps = [];
+            for (const next of pathResult.path) {
+                const nextSystem = systemMap.get(next);
+                if (!nextSystem) {
+                    console.error(`System #${next} not found`);
+                    return;
+                }
+                stepNumber += 1;
+                const wh = wormholesBySystemId.get(next);
+                const coordsText = `(${nextSystem.x}, ${nextSystem.y}, ${nextSystem.z})`;
+                const systemText = next < 0 ? coordsText : `s#${next} ${coordsText}`;
+                if (!last) {
+                    pathResult.steps.push(`${stepNumber}): Start at ${systemText}`);
+                } else {
+                    let dist;
+                    if (lastWh && lastWh.to === next) {
+                        dist = localSystemDistance;
+                        pathResult.steps.push(`${stepNumber}): Jump : ${systemText} : ${lastWh.name}`);
+                    } else {
+                        dist = absDistance(nextSystem, systemMap.get(last)) + 2 * localSystemDistance;
+                        pathResult.steps.push(`${stepNumber}): Transfer : ${systemText} : ${round2(dist / 1_000_000)} mkm`);
+                    }
+                    sum += dist;
+                }
+                last = next;
+                lastWh = wh;
+            }
+        }
+
+        function _findShortestPath(systemMap, wormholes, startId, endId) {
+            const wormholeMap = new Map();
+            const usedSystemIds = new Set([startId, endId]);
+            for (const wh of wormholes) {
+                if (!wormholeMap.has(wh.system)) wormholeMap.set(wh.system, new Set());
+                wormholeMap.get(wh.system).add(wh.tsystem);
+                usedSystemIds.add(wh.system);
+                usedSystemIds.add(wh.tsystem);
+            }
+            console.debug('usedSystemIds', usedSystemIds);
+            const distances = new Map();
+            const previous = new Map();
+            const visited = new Set();
+            for (const systemId of usedSystemIds) {
+                distances.set(systemId, Infinity);
+                previous.set(systemId, null);
+            }
+            distances.set(startId, 0);
+            while (visited.size < usedSystemIds.size) {
+                let currentId = null;
+                let currentDist = Infinity;
+                for (const [id, d] of distances) {
+                    if (!visited.has(id) && d < currentDist) {
+                        currentDist = d;
+                        currentId = id;
+                    }
+                }
+                if (currentId === null) break;
+                if (currentId === endId) break;
+                visited.add(currentId);
+                const current = systemMap.get(currentId);
+                for (const nextSystemId of usedSystemIds) {
+                    if (visited.has(nextSystemId) || nextSystemId === currentId) continue;
+                    let cost;
+                    if (wormholeMap.get(currentId)?.has(nextSystemId)) {
+                        cost = 0;
+                    } else {
+                        cost = absDistance(current, systemMap.get(nextSystemId));
+                    }
+                    const candidate = currentDist + cost;
+                    if (candidate < distances.get(nextSystemId)) {
+                        distances.set(nextSystemId, candidate);
+                        previous.set(nextSystemId, currentId);
+                    }
+                }
+            }
+            const path = [];
+            let node = endId;
+            while (node !== null) {
+                path.unshift(node);
+                node = previous.get(node);
+            }
+            if (path[0] !== startId) {
+                return null;
+            }
+            return {startId, endId, distance: distances.get(endId), path};
+        }
+
+        const systems = await db.system.toArray();
+        const wormholes = await db.wh.toArray();
+        const systemMap = new Map(systems.map(s => [s.id, s]));
+        systemMap.set(-1, {id: -1, name: "start", x: row.x, y: row.y, z: row.z})
+        systemMap.set(-2, {id: -2, name: "end", x: refPoint.x, y: refPoint.y, z: refPoint.z})
+        const pathResult = _findShortestPath(systemMap, wormholes, -1, -2);
+        if (pathResult) {
+            _determineSteps(systemMap, wormholes, pathResult);
+            const stepsString = pathResult.steps.join("\n");
+            window.alert(`Path found, distance is ${round2(pathResult.distance / 1_000_000)} km, steps:\n${stepsString}`);
+        } else {
+            window.alert("Path not found!");
+        }
+    }
+
     const CLCK = {
         MENU: function (e, cell) {
             const row = cell.getRow().getData();
@@ -583,13 +700,13 @@ a.icon { text-decoration: none !important; }
             // 'Launch' menu item
             if (row.launch) {
                 actions.push({
-                    label: `<a href="${row.launch}" class="icon" target="maingame">${ICON.Launch} Launch '${refPoint.name}' toward '${row.name}</a>`,
+                    label: `<a href="${row.launch}" class="icon" target="maingame">${ICON.Launch} Launch ${refPoint.name} toward ${row.name}</a>`,
                 });
             }
             // 'Set reference point' menu item
             if (row.x != null) {
                 actions.push({
-                    label: `<a href="#" class="icon">${ICON.Reference} Set '${row.name}' as Reference point</a>`,
+                    label: `<a href="#" class="icon">${ICON.Reference} Set ${row.name} as Reference point</a>`,
                     action: () => setReferencePointTo(row),
                 });
             }
@@ -600,6 +717,14 @@ a.icon { text-decoration: none !important; }
                     action: () => GM_setClipboard(String(row.position), "text"),
                 });
             }
+            // 'Compute shortest path' menu item
+            if (row.x != null && refPoint.x != null) {
+                actions.push({
+                    label: `<a href="#" class="icon">${ICON.Path} Find shortest path from ${refPoint.name} to ${row.name}</a>`,
+                    action: () => findShortestPath(row),
+                });
+            }
+
             return actions;
         },
     }
