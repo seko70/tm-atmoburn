@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Archivist
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.21.1
+// @version      0.21.3
 // @description  Parses and stores various entities while browsing AtmoBurn; see Tampermonkey menu for some actions; see abs-awacs for in-game UI
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
@@ -16,7 +16,6 @@
 // @match        https://*.atmoburn.com/extras/fleet_refuel_info.php?*
 // @match        https://*.atmoburn.com/rally_points.php*
 // @match        https://*.atmoburn.com/sensor_net.php*
-// @run-at       document-end
 // @require      https://cdn.jsdelivr.net/npm/dexie@4.2.1/dist/dexie.min.js
 // @require      https://github.com/seko70/tm-atmoburn/raw/refs/tags/commons/abs-utils/v1.2.2/commons/abs-utils.js
 // @require      https://github.com/seko70/tm-atmoburn/raw/refs/tags/commons/atmoburn-service-db/v1.2.0/commons/atmoburn-service-db.js
@@ -215,10 +214,10 @@
                 if (k === 'src') continue; // ignore management/debug/technical attributes - don't count it as a reason for update
                 if (k === 'ts' && oldData.ts && newData.ts && !isOlderThan(oldData.ts, newData.ts, 4 * 3600)) continue; // timestamp is special
                 if (newData[k] != null && !Object.is(oldData[k], newData[k])) {  // note: handles NaN correctly
-                    xdebug('_isShallowEqualForUpdate', type, oldData.id, k, oldData[k], newData[k]);
-                    if (k === 'name') {
-                        xdebug("_isShallowEqualForUpdate name hex diff", toHex(oldData[k]), toHex(newData[k]));
-                    }
+                    //xdebug('_isShallowEqualForUpdate', type, oldData.id, k, oldData[k], newData[k]);
+                    //if (k === 'name') {
+                    //    xdebug("_isShallowEqualForUpdate name hex diff", toHex(oldData[k]), toHex(newData[k]));
+                    //}
                     return false;
                 }
             }
@@ -515,7 +514,7 @@
             const navData = byId('navData');
             if (!navData) return;
             // parse fleet coordinates
-            Parsing.parseFleetCoordinates(navData, fleet);
+            if (!Parsing.parseFleetCoordinates(navData, fleet)) return;
             // parse fleet location (colony, world, system) if present
             const leftData = navData.querySelector('div#positionLeft');
             leftData?.querySelectorAll('a[href]')?.forEach((link) => {
@@ -679,9 +678,11 @@
             const rightData = navData.querySelector('div#positionRight > div > a');
             if (rightData && rightData.textContent) {
                 Parsing.parseXYZ(rightData.textContent, fleet);
+                assert(fleet.x != null, 'No fleet global coordinates?');
+                return fleet;
             }
-            assert(fleet.x != null, 'No fleet global coordinates?');
-            return fleet;
+            xdebug("Fleet position not loaded, yet?", rightData);
+            return null;
         },
         parseInfoFromLink: function (link, pattern, obj, idAttr, nameAttr) {
             if (!link) return false;
@@ -996,7 +997,6 @@
                     }
                 });
             }
-
             await ADB.bulkStore('colony', colonies);
             await deleteMissingColonies(colonies, scanner.world);
         }
