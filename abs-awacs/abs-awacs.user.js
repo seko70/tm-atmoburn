@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - AWACS
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.19.1
+// @version      0.19.2
 // @description  UI for abs-archivist - display nearest fleets, colonies, rally points in various contexts; uses data produced by abs-archivist
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
@@ -305,7 +305,7 @@ a.icon { text-decoration: none !important; }
             columns,
             layout: "fitColumns",
             height: `calc(100vh - ${headHeight}px)`,
-            initialSort: [{column: "dist", dir: "asc"},],
+            initialSort: [{column: "name", dir: "asc"},{column: "dist", dir: "asc"}],
             ...options,
         });
 
@@ -363,8 +363,8 @@ a.icon { text-decoration: none !important; }
         return null;
     }
 
-    function _concatStrings(s1, s2, s3) {
-        return [s1, s2, s3].filter(s => s != null && s !== '').join(', ') || null;
+    function _concatStrings(...strings) {
+        return strings.filter(s => s != null && s !== '').join(', ') || null;
     }
 
     function _getSubtype(objType, obj) {
@@ -380,7 +380,7 @@ a.icon { text-decoration: none !important; }
             icon: icon,
             type: objType,
             name: o.name,
-            comment: _concatStrings(o.comment, o.location, _getSubtype(objType, o)),
+            comment: _concatStrings(o.location, o.comment, _getSubtype(objType, o)),
             navigate: _computeNavigateLink(objType, o),
             launch: _computeLaunchLink(objType, o),
             player: o.player,
@@ -398,6 +398,7 @@ a.icon { text-decoration: none !important; }
             system: o.system,
             world: o.world,
             colony: o.colony,
+            location: o.location,
             dist: havePosition ? absDistance(refPoint, o) : null,
             horiz: havePosition ? `${directions.arrow} ${directions.clock}'` : null,
             vert: havePosition ? `${directions.v}º` : null,
@@ -472,14 +473,14 @@ a.icon { text-decoration: none !important; }
 
     // helper function for creating labeled value
     const _u = function (label, value) {
-        return `${label}: <b>${value ?? "?"}</b>`
+        return `${label}: <b>${value ?? "-"}</b>`
     }
 
     // Field tooltips
     const TT = {
         REL: function (e, cell, _onRendered) {
             const r = cell.getRow().getData();
-            return `${_u("System", r.system)}<br>${_u("World", r.world)}<br>${_u("Location", r.location)}`;
+            return `${_u("System", r.system)}<br>${_u("World", r.world)}<br>${_u("Colony", r.colony)}<br>${_u("Position", r.position)}<br>${_u("Location", r.location)}`;
         },
         DIR: function (e, cell, _onRendered) {
             return `${_u("Vertical elevation", cell.getRow().getData().vert)}`;
@@ -759,11 +760,11 @@ a.icon { text-decoration: none !important; }
             {title: "ID", field: "id", headerFilter: true, width: 60, headerTooltip: HTT.ID},
             {title: "Sig", field: "sig", headerFilter: true, width: 60, headerTooltip: HTT.SIG},
             {title: "Name", field: "name", headerFilter: true, minWidth: 130, formatter: FMT.NAME, tooltip: TT.NAME},
-            {title: "Detail", field: "comment", headerFilter: true, minWidth: 70},
+            {title: "Detail", field: "comment", headerFilter: true, minWidth: 90, tooltip: TT.REL},
             {title: "", field: "actions", minWidth: 20, width: 25, hozAlign: "center", headerSort: false, formatter: FMT.MENU, clickMenu: CLCK.MENU},
             {title: "Player", field: "player", headerFilter: true, minWidth: 70, formatter: FMT.REF_COLOR_FG},
             {title: "Rel", field: "rel", headerFilter: true, width: 50, headerSort: false, formatter: FMT.REF_COLOR_FG, headerTooltip: HTT.REL},
-            {title: "Position", field: "position", headerFilter: true, minWidth: 40, maxWidth: 200, hozAlign: "right", tooltip: TT.REL},
+//            {title: "Position", field: "position", headerFilter: true, minWidth: 40, maxWidth: 200, hozAlign: "right", tooltip: TT.REL},
             {title: "Dist", field: "dist", hozAlign: "right", width: 70, sorter: "number", headerTooltip: HTT.DIST, formatter: FMT.FIXED2},
             {title: "Dir", field: "horiz", hozAlign: "right", headerFilter: true, width: 50, headerSort: false, headerTooltip: HTT.DIR, tooltip: TT.DIR},
             {title: "Pop", field: "pop", hozAlign: "right", width: 60, sorter: "number"},
