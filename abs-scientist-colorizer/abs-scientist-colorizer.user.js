@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Scientists Colorizer
 // @namespace    sk.seko
 // @license      MIT
-// @version      1.0.0
+// @version      1.1.0
 // @description  Parses and highlights best skill for every scientis and top 5 scientists for all skills
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-scientist-colorizer/abs-scientist-colorizer.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-scientist-colorizer/abs-scientist-colorizer.user.js
@@ -23,12 +23,13 @@
 
         const COLOR = {
             C_GREY: '#333333',
+            C_RED: '#cc0000',
             C_TOP: {
-                0: '#00cc00',
-                1: '#00aa00',
-                2: '#118811',
-                3: '#117711',
-                4: '#116611'
+                0: '#33cc33',
+                1: '#009900',
+                2: '#336600',
+                3: '#225500',
+                4: '#1f4400'
             }
         }
 
@@ -70,23 +71,19 @@
             // find first "sci" row
             const firstSciRow = mid.querySelector('div[id^="sciRow"]:not(#sciRowBest)');
             // all scientist rows
-            const rows = [...firstSciRow.parentNode.querySelectorAll(':scope > div[id^="sciRow"]')].filter(div => /^sciRow\d+$/.test(div.id));
-            console.log("rows", rows);
+            const rowElems = [...firstSciRow.parentNode.querySelectorAll(':scope > div[id^="sciRow"]')].filter(div => /^sciRow\d+$/.test(div.id));
             // all skill rows
-            const skills = rows.map(row => [...row.children].filter(child => child.tagName === 'DIV')[1]).filter(Boolean);
-            console.log("skills", skills);
+            const rows = rowElems.map(row => [...row.children].filter(child => child.tagName === 'DIV')[1]).filter(Boolean);
 
             // create matrix of "elements" and adequate matrix of "values"
             const elementsMatrix = [];
             const valuesMatrix = [];
-            for (const scientist of skills) {
-                const elements = [...scientist.querySelectorAll(':scope > div')];
+            for (const row of rows) {
+                const elements = [...row.querySelectorAll(':scope > div')];
                 elementsMatrix.push(elements);
                 const values = elements.map(val => Number(val.textContent?.trim()));
                 valuesMatrix.push(values);
             }
-            // console.debug(elementsMatrix);
-            // console.debug(valuesMatrix);
 
             // colorize best value skill (all best values) for the row (i.e. for the scientist)
             valuesMatrix.forEach((row, rowIndex) => {
@@ -99,6 +96,7 @@
             });
 
             // colorize top 5 best skill values for every skill
+            const bestRows = new Set();
             const topCells = getTopNPerColumn(valuesMatrix, 5);
             topCells.forEach(({row, col, rank}) => {
                 const el = elementsMatrix[row][col];
@@ -106,6 +104,14 @@
                     el.style.color = COLOR.C_TOP[rank];
                     el.style.className = "bold";
                     //el.style.outline = '1px solid yellowgreen';
+                    bestRows.add(row);
+                }
+            });
+
+            // mark rows that are NOT in any top 5 skills
+            rowElems.forEach((rowElem, index) => {
+                if (!bestRows.has(index)) {
+                    rowElem.querySelector(':scope > div:first-of-type > div:first-of-type > span').style.color = COLOR.C_RED;
                 }
             });
         }
