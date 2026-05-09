@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Archivist
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.21.3
+// @version      0.21.4
 // @description  Parses and stores various entities while browsing AtmoBurn; see Tampermonkey menu for some actions; see abs-awacs for in-game UI
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
@@ -214,10 +214,6 @@
                 if (k === 'src') continue; // ignore management/debug/technical attributes - don't count it as a reason for update
                 if (k === 'ts' && oldData.ts && newData.ts && !isOlderThan(oldData.ts, newData.ts, 4 * 3600)) continue; // timestamp is special
                 if (newData[k] != null && !Object.is(oldData[k], newData[k])) {  // note: handles NaN correctly
-                    //xdebug('_isShallowEqualForUpdate', type, oldData.id, k, oldData[k], newData[k]);
-                    //if (k === 'name') {
-                    //    xdebug("_isShallowEqualForUpdate name hex diff", toHex(oldData[k]), toHex(newData[k]));
-                    //}
                     return false;
                 }
             }
@@ -425,35 +421,36 @@
         return w;
     }
 
+    // find fleet matchnig given signature, and update the fleet eventually; return true if found
+    async function checkForMatchingFleetBySignature(sig) {
+        // check for fleets with same signature first...
+        let matchingFleet = await db.fleet.where('signature').equals(sig.id).first();
+        if (!matchingFleet) {
+            // ... and then check for fleets with same name, player and position
+            matchingFleet = await db.fleet.where('name').equals(sig.name).filter(
+                f => f.player === sig.player && f.x === sig.x && f.y === sig.y && f.z === sig.z
+            ).first();
+        }
+        if (matchingFleet) {
+            // update matching fleet if it is old enough
+            if (isOlderThan(matchingFleet.ts, sig.ts, 3600)) {
+                safeCopy(matchingFleet, ['system', 'world', 'x', 'y', 'z', 'location'], sig);
+                await ADB.store('fleet', matchingFleet);
+            }
+            return true; // we don't need this signature anymore - there is a fleet recorded
+        }
+        return false;
+    }
+
     // async job to clean duplicate signatures (heuristics ahead!)
     async function signatureCleanup() {
-
-        async function _processSignature(sig) {
-            // check for fleets with same signature first...
-            let matchingFleet = await db.fleet.where('signature').equals(sig.id).first();
-            if (!matchingFleet) {
-                // ... and then check for fleets with same name, player and position
-                matchingFleet = await db.fleet.where('name').equals(sig.name).filter(
-                    f => f.player === sig.player && f.x === sig.x && f.y === sig.y && f.z === sig.z
-                ).first();
-            }
-            if (matchingFleet) {
-                if (isOlderThan(matchingFleet.ts, sig.ts, 3600)) {
-                    safeCopy(matchingFleet, ['system', 'world', 'x', 'y', 'z', 'location'], sig);
-                    await ADB.store('fleet', matchingFleet);
-                }
-                xdebug("Signature can be deleted - matching fleet(s) found", sig, matchingFleet)
-                return true; // we don't need this signature anymore - there is a fleet recorded
-            }
-            return false;
-        }
-
         // phase 1 - readonly scan, collecting IDs for delete
         const idsToDelete = [];
         const allSignatures = await db.signature.toArray();
         for (const sig of allSignatures) {
-            const shouldDelete = await _processSignature(sig);
+            const shouldDelete = await checkForMatchingFleetBySignature(sig);
             if (shouldDelete) {
+                xdebug("Signature can be deleted - matching fleet(s) found", sig)
                 idsToDelete.push(sig.id);
             }
         }
@@ -1114,8 +1111,10 @@
             // process the data
             if (sig.id && sig.name) {
                 await enrichFleetLocation(sig);
-                Parsing.sanitizeSignature(sig)
-                signatures.push(sig);
+                Parsing.sanitizeSignature(sig);
+                if (! await checkForMatchingFleetBySignature(sig)) {
+                    signatures.push(sig);
+                }
             } else {
                 xerror('Unabled to parse signature and/or name', sig);
             }
