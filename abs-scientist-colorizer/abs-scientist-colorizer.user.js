@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Scientists Colorizer
 // @namespace    sk.seko
 // @license      MIT
-// @version      1.1.0
+// @version      1.1.1
 // @description  Parses and highlights best skill for every scientis and top 5 scientists for all skills
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-scientist-colorizer/abs-scientist-colorizer.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-scientist-colorizer/abs-scientist-colorizer.user.js
@@ -65,7 +65,7 @@
             return result;
         }
 
-        function colorizeScientists() {
+        function colorizeScientists(isResearch) {
             const mid = byId("midcolumn");
             if (!mid) return;
             // find first "sci" row
@@ -96,26 +96,29 @@
             });
 
             // colorize top 5 best skill values for every skill
-            const bestRows = new Set();
-            const topCells = getTopNPerColumn(valuesMatrix, 5);
-            topCells.forEach(({row, col, rank}) => {
-                const el = elementsMatrix[row][col];
-                if (el) {
-                    el.style.color = COLOR.C_TOP[rank];
-                    el.style.className = "bold";
-                    //el.style.outline = '1px solid yellowgreen';
-                    bestRows.add(row);
-                }
-            });
+            if (!isResearch) {
+                const bestRows = new Set();
+                const topCells = getTopNPerColumn(valuesMatrix, 5);
+                topCells.forEach(({row, col, rank}) => {
+                    const el = elementsMatrix[row][col];
+                    if (el) {
+                        el.style.color = COLOR.C_TOP[rank];
+                        el.style.className = "bold";
+                        //el.style.outline = '1px solid yellowgreen';
+                        bestRows.add(row);
+                    }
+                });
 
-            // mark rows that are NOT in any top 5 skills
-            rowElems.forEach((rowElem, index) => {
-                if (!bestRows.has(index)) {
-                    rowElem.querySelector(':scope > div:first-of-type > div:first-of-type > span').style.color = COLOR.C_RED;
-                }
-            });
+                // mark rows that are NOT in any top 5 skills
+                rowElems.forEach((rowElem, index) => {
+                    if (!bestRows.has(index)) {
+                        rowElem.querySelector(':scope > div:first-of-type > div:first-of-type > span').style.color = COLOR.C_RED;
+                    }
+                });
+            }
         }
 
-        colorizeScientists();
+        const isResearch = document.URL.match(/atmoburn\.com\/sci_research\.php/i);
+        colorizeScientists(isResearch);
     }
 )();
