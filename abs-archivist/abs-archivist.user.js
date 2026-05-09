@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Archivist
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.21.4
+// @version      0.21.5
 // @description  Parses and stores various entities while browsing AtmoBurn; see Tampermonkey menu for some actions; see abs-awacs for in-game UI
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
@@ -286,7 +286,7 @@
 
     function createColonyFromFleet(id, fleet) {
         const c = {id: id, ts: now};
-        safeCopy(c, ['name', 'world', 'system', 'x', 'y', 'z'], fleet, ['colonyName', 'world', 'system', 'x', 'y', 'z']);
+        safeCopy(c, ['name', 'world', 'system', 'x', 'y', 'z', 'location'], fleet, ['colonyName', 'world', 'system', 'x', 'y', 'z', 'location']);
         Parsing.sanitizeColony(c);
         return c;
     }
@@ -924,7 +924,7 @@
             c.population = safeInteger(Parsing.textContent(cols[4])); // colony population
             c.size = safeInteger(Parsing.textContent(cols[5])); // colony size
             // copy some attributes from scanning entity (colony or fleet)
-            safeCopy(c, ['system', 'world', 'x', 'y', 'z'], scanner)
+            safeCopy(c, ['system', 'world', 'x', 'y', 'z', 'location'], scanner)
             // sanitize colony attributes
             Parsing.sanitizeColony(c);
             // parsed record to colony list
