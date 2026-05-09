@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - AWACS
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.19.2
+// @version      0.19.3
 // @description  UI for abs-archivist - display nearest fleets, colonies, rally points in various contexts; uses data produced by abs-archivist
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
@@ -483,7 +483,8 @@ a.icon { text-decoration: none !important; }
             return `${_u("System", r.system)}<br>${_u("World", r.world)}<br>${_u("Colony", r.colony)}<br>${_u("Position", r.position)}<br>${_u("Location", r.location)}`;
         },
         DIR: function (e, cell, _onRendered) {
-            return `${_u("Vertical elevation", cell.getRow().getData().vert)}`;
+            const r = cell.getRow().getData();
+            return `${_u("Horizontal direction", r.horiz)}<br>${_u("Vertical direction", r.vert)}`;
         },
         SIZE: function (e, cell, _onRendered) {
             return `${_u("Roster", cell.getRow().getData().roster)}`;
@@ -746,7 +747,7 @@ a.icon { text-decoration: none !important; }
             REL: "Player relation; (m)e,(f)riend,(n)eutral,(e)nemy",
             ACT: "Action buttons",
             DIST: `Distance from ${refPoint.name}, in mkm`,
-            DIR: `O’clock direction from ${refPoint.name}; relative vertical elevation (in degrees) is in tooltip`,
+            DIR: `O’clock direction from ${refPoint.name}; relative vertical direction (in degrees) is in tooltip`,
         };
         // collect/compute/process data
         const data = [];
