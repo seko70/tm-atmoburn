@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Blueprints Colorizer
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.12.1
+// @version      0.12.2
 // @description  Parses and highlights best/worst/most effective blueprints (per attribute)
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-blueprint-colorizer/abs-blueprint-colorizer.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-blueprint-colorizer/abs-blueprint-colorizer.user.js
@@ -128,7 +128,7 @@
 
         // safely parse integer from string, ignore commas etc
         function safeNumber(s) {
-            return s ? Number(s.replace(/[^\d,.+-].*$/, "").replace(/,/g, '')) : null;
+            return s ? Number(s.trim().replace(/[^\d,.+-].*$/, "").replace(/,/g, '')) : null;
         }
 
         function getElementsByExactText(elements, text) {
@@ -176,8 +176,9 @@
         }
 
         function parseTitle(row) {
-            const titleEl = row.querySelector(':scope > div:first-of-type > div:first-of-type')
+            let titleEl = row.querySelector(':scope > div:first-of-type > div:first-of-type')
             if (!titleEl) throw new NoElementError(ATTR.TITLE);
+            titleEl = titleEl.querySelector(':scope > a') || titleEl;
             const title = titleEl.textContent?.trim();
             return {attr: ATTR.TITLE, val: title, el: titleEl};
         }
@@ -220,7 +221,6 @@
         }
 
         function colorizeProperty(attr, val, el, extremes) {
-            //console.debug("colorizeProperty", attr, extremes);
             if (extremes.best === extremes.worst) return; // do not colorize if the are all equal
             const p = 1.0 - (Math.abs((val - extremes.best) / (extremes.best - extremes.worst)));
             let color = attr.c ? null : findQualityColor(p);
@@ -433,8 +433,9 @@
         }
 
         function colorizeWorseBlueprint(worstRegister, worsebp, betterbp) {
+            console.log("colorizeWorseBlueprint - worse/better: ", worsebp, betterbp);
             if (worsebp.price.val < betterbp.price.val) {
-                if (worstRegister.has(worsebp.title.val)) { // ignore if already have better BP
+                if (!worstRegister.has(worsebp.title.val)) { // ignore if already have better BP
                     colorizeForeground(worsebp.title.el, COLOR.C_WORSEBP2, `This BP is worse than ${betterbp.title.val}, but has lower price (resources not compared)`);
                 }
             } else {
