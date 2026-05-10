@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Blueprints Colorizer
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.12.0
+// @version      0.12.1
 // @description  Parses and highlights best/worst/most effective blueprints (per attribute)
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-blueprint-colorizer/abs-blueprint-colorizer.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-blueprint-colorizer/abs-blueprint-colorizer.user.js
@@ -432,11 +432,14 @@
             return {nores, hybrid, title};
         }
 
-        function colorizeWorseBlueprint(worsebp, betterbp) {
+        function colorizeWorseBlueprint(worstRegister, worsebp, betterbp) {
             if (worsebp.price.val < betterbp.price.val) {
-                colorizeForeground(worsebp.title.el, COLOR.C_WORSEBP2, `This BP is worse than ${betterbp.title.val}, but has lower price (resources not compared)`);
+                if (worstRegister.has(worsebp.title.val)) { // ignore if already have better BP
+                    colorizeForeground(worsebp.title.el, COLOR.C_WORSEBP2, `This BP is worse than ${betterbp.title.val}, but has lower price (resources not compared)`);
+                }
             } else {
                 colorizeForeground(worsebp.title.el, COLOR.C_WORSEBP1, `This BP is worse than ${betterbp.title.val} (resources not compared)`);
+                worstRegister.add(worsebp.title.val);
             }
         }
 
@@ -456,11 +459,12 @@
                 colorizeBP(bp, extremes);
             }
             if (worseFn && bpList.length > 1) {
+                const worstRegister = new Set();
                 for (let i = 0; i < bpList.length; i += 1) {
                     for (let j = i + 1; j < bpList.length; j += 1) {
                         const result = worseFn(bpList[i], bpList[j]);
                         if (!result) continue;
-                        colorizeWorseBlueprint(...result);
+                        colorizeWorseBlueprint(worstRegister, ...result);
                     }
                 }
             }
