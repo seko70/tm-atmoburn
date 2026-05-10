@@ -5,12 +5,14 @@ This is Tampermonkey (https://www.tampermonkey.net/) script for Atmoburn game (h
 Parses and highlights best/worst/most effective blueprints (per attribute), like:
 - best (🥇) attribute (from all you blueprints of this type)
 - second best (🥈) attribute
-- worst (💀) attribute
+- worst (🔻) attribute
 - most effective  (👍) - calculated attribute, see tooltip
 - least effective  (👎)
 - highlights hybrids (to not miss important/interesting blueprints)
 - highlights no-res blueprints (detto)
 - attribute values are colored light green (best), dark green (good), yellow (so-so), dark red (bad), no-color (worst)
+- blueprint title is red if there is better print (all relevant attributes) including better price (see tooltip)
+- blueprint title is orange if there is better print (all relevant attributes) but has higher price (see tooltip)
 - etc - see screenshot
 
 See tooltips for attribute values / badges - for more details.

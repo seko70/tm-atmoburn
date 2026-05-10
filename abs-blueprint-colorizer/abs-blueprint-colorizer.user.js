@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Blueprints Colorizer
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.11.2
+// @version      0.12.0
 // @description  Parses and highlights best/worst/most effective blueprints (per attribute)
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-blueprint-colorizer/abs-blueprint-colorizer.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-blueprint-colorizer/abs-blueprint-colorizer.user.js
@@ -23,17 +23,20 @@
             C_BEST: '#22dd00',
             C_GOOD: '#008800',
             C_MID: '#f0f032',
-            C_BAD: '#cc0000',
-            C_WORST: null,
+            C_BAD: '#cc7700',
+            C_WORST: '#aa0000',
             C_NORES: '#57440f',
             C_HYBRID: '#033545',
+            C_WORSEBP1: '#cc0000',
+            C_WORSEBP2: '#ff8500',
         }
 
         const BADGE = {
             FIRST: {icon: '🥇', title: 'best'},
             SECOND: {icon: '🥈', title: 'second-best'},
             //THIRD: {icon: '🥉️', title: 'third-best'},
-            LAST: {icon: '💀', title: 'worst'},
+            LAST: {icon: '🔻', title: 'worst'},
+            //DELETE: {icon: '💀', title: 'delete'},
             EFFECTIVE: {icon: '👍', title: 'most-effective'},
             INEFFECTIVE: {icon: '👎🏽', title: 'least-effective'}
         }
@@ -73,8 +76,8 @@
             // computed attributes
             CPQ: {n: 'cost-per-worker-and-quality', r: true, c: true},
             PPG: {n: 'price-per-gun', r: true, c: true},
-            SPM: {n: 'scanner-per-mass', c:true},
-            GPM: {n: 'guns-per-mass', c:true},
+            SPM: {n: 'scanner-per-mass', c: true},
+            GPM: {n: 'guns-per-mass', c: true},
             TCPM: {n: 'transport-capacity-per-mass', c: true},
             CCPM: {n: 'colonists-capacity-per-mass', c: true},
             LPM: {n: 'layout-per-mass', c: true},
@@ -85,7 +88,8 @@
             SDPC: {n: 'support-damage-per-cost', c: true},
             // special attributes (boolean)
             NORES: {n: 'no-resources', s: true},
-            HYBRID: {n: 'is-hybrid', s: true}
+            HYBRID: {n: 'is-hybrid', s: true},
+            TITLE: {n: 'bp-title', s: true},
         }
 
 // --- helpers ---
@@ -164,11 +168,18 @@
         }
 
         function isHybrid(bpTypeElement) {
-            if (!bpTypeElement) throw new NoElementError(ATTR.HYBRID);
+            if (!bpTypeElement) throw new NoElementError(ATTR.TITLE);
             const el = bpTypeElement.querySelector(':scope > div:first-of-type');
             const isHybrid = el && el.textContent?.trim().includes(' / ');
             if (!isHybrid) return null; // ignore if not set
-            return {attr: ATTR.HYBRID, val: isHybrid, el: el.parentNode.parentNode};
+            return {attr: ATTR.TITLE, val: isHybrid, el: el.parentNode.parentNode};
+        }
+
+        function parseTitle(row) {
+            const titleEl = row.querySelector(':scope > div:first-of-type > div:first-of-type')
+            if (!titleEl) throw new NoElementError(ATTR.TITLE);
+            const title = titleEl.textContent?.trim();
+            return {attr: ATTR.TITLE, val: title, el: titleEl};
         }
 
         function parseBlueprintAttribute(attr, promptElements, promptStr) {
@@ -213,8 +224,9 @@
             if (extremes.best === extremes.worst) return; // do not colorize if the are all equal
             const p = 1.0 - (Math.abs((val - extremes.best) / (extremes.best - extremes.worst)));
             let color = attr.c ? null : findQualityColor(p);
-            let tooltip = `${attr.n}: ${round2(val)} (${Math.round(p * 100)}% of top)`;
             let badge = null;
+            let tooltip = `${attr.n}: ${round2(val)}`;
+            const percentageOfTop = Math.round(p * 100);
             if (val === extremes.best) {
                 badge = attr.c ? BADGE.EFFECTIVE : BADGE.FIRST;
             } else if (!attr.c && val === extremes.second) {
@@ -222,7 +234,12 @@
             } else if (val === extremes.worst) {
                 badge = attr.c ? BADGE.INEFFECTIVE : BADGE.LAST;
             }
-            colorizeForeground(el, color, badge ? `${tooltip} (${badge.title})` : tooltip, badge ? badge.icon : null);
+            if (badge) {
+                tooltip = `${tooltip} (${percentageOfTop}% of top = ${badge.title})`;
+            } else {
+                tooltip = `${tooltip} (${percentageOfTop}% of top)`;
+            }
+            colorizeForeground(el, color, tooltip, badge ? badge.icon : null);
         }
 
         function findExtremes(bpList, attrKey, lessIsBetter) {
@@ -267,24 +284,46 @@
             }
         }
 
+        // compare bp1 vs bp2 values; return null (if none is worse) or [worse, better] tuple; smallerValues and smallerValues are vector of values to comapre
+        function getWorseOf(bp1, bp2, values1, values2) {
+            if (bp1.hybrid?.val || bp2.hybrid?.val) return null; // we do not compare hybrids, yet
+            if (bp1.nores?.val || bp2.nores?.val) return null; // we do not compare NO RES blueprints, yet
+            const bp1worse = values1.every((value, index) => value <= values2[index]);
+            const bp2worse = values2.every((value, index) => value <= values1[index]);
+            if (bp1worse && bp2worse) return bp1.price?.val > bp2.price?.val ? [bp1, bp2] : [bp2, bp1]; // if equal, more expensive is worse
+            if (bp1worse) return [bp1, bp2];
+            if (bp2worse) return [bp2, bp1];
+            return null; // not comaparable in general
+        }
+
+        function getWorseFacility(bp1, bp2) {
+            return getWorseOf(bp1, bp2,
+                [bp1.capacity?.val, bp1.quality?.val, bp2.costpw?.val],
+                [bp2.capacity?.val, bp2.quality?.val, bp1.costpw?.val]
+            );
+        }
+
         function parseFacilityBlueprint(row) {
             const promptElements = getTablePrompts(row);
             const resourcePromptElements = getResourceTablePrompts(row);
-            const bpTypeElement = getBlueprintType(row);
             const capacity = parseBlueprintAttribute(ATTR.CAPACITY, promptElements, "Capacity:");
             const quality = parseBlueprintAttribute(ATTR.QUALITY, promptElements, ["Quality:", "Effectiveness:"]);
             const costpw = parseBlueprintAttribute(ATTR.COSTPW, promptElements, "Cost per worker:");
             const price = parseResourceTableAttribute(ATTR.PRICE, resourcePromptElements);
             const cpq = computedAttribute(ATTR.CPQ, costpw, safeRatio2(costpw, quality, 100));
-            const nores = isNoRes(resourcePromptElements);
-            const hybrid = isHybrid(bpTypeElement);
-            return {capacity, quality, costpw, price, cpq, nores, hybrid};
+            return {capacity, quality, costpw, price, cpq};
+        }
+
+        function getWorseHull(bp1, bp2) {
+            return getWorseOf(bp1, bp2,
+                [bp1.guns?.val, bp1.transport?.val, bp1.colonists?.val, bp1.scanner?.val, bp1.layout?.val, bp1.engines?.val, bp2.mpe?.val],
+                [bp2.guns?.val, bp2.transport?.val, bp2.colonists?.val, bp2.scanner?.val, bp2.layout?.val, bp2.engines?.val, bp1.mpe?.val]
+            );
         }
 
         function parseHullBlueprint(row) {
             const promptElements = getTablePrompts(row);
             const resourcePromptElements = getResourceTablePrompts(row);
-            const bpTypeElement = getBlueprintType(row);
             const guns = parseBlueprintAttribute(ATTR.GUNS, promptElements, "Forward Gun Cluster:");
             const transport = parseBlueprintAttribute(ATTR.TRANSPORT, promptElements, "Transport Capacity:");
             const colonists = parseBlueprintAttribute(ATTR.COLONISTS, promptElements, "Colonists Capacity:");
@@ -300,60 +339,76 @@
             const ccpm = computedAttribute(ATTR.CCPM, colonists, safeRatio2(colonists, mass));
             const lpm = computedAttribute(ATTR.LPM, layout, safeRatio2(layout, mass));
             const mpe = computedAttribute(ATTR.MPE, mass, safeRatio2(mass, engines));
-            const nores = isNoRes(resourcePromptElements);
-            const hybrid = isHybrid(bpTypeElement);
-            return {guns, transport, colonists, scanner, layout, engines, price, ppg, gpm, spm, tcpm, ccpm, lpm, mpe, nores, hybrid}
+            return {guns, transport, colonists, scanner, layout, engines, price, ppg, gpm, spm, tcpm, ccpm, lpm, mpe}
+        }
+
+        function getWorseWeapon(bp1, bp2) {
+            return getWorseOf(bp1, bp2,
+                [bp1.damage?.val, bp1.firerate?.val, bp2.mass?.val],
+                [bp2.damage?.val, bp2.firerate?.val, bp1.mass?.val]
+            );
         }
 
         function parseWeaponBlueprint(row) {
             const promptElements = getTablePrompts(row);
             const resourcePromptElements = getResourceTablePrompts(row);
-            const bpTypeElement = getBlueprintType(row);
             const damage = parseBlueprintAttribute(ATTR.DAMAGE, promptElements, "Damage Factor:");
             const firerate = parseBlueprintAttribute(ATTR.FIRERATE, promptElements, "Fire Rate:");
             const mass = parseBlueprintAttribute(ATTR.MASS, promptElements, "Mass:");
             const damagepm = parseBlueprintAttribute(ATTR.DAMAGEPM, promptElements, "Damage per Mass:");
             const damagepc = parseBlueprintAttribute(ATTR.DAMAGEPC, promptElements, "Damage per Cost:");
             const price = parseResourceTableAttribute(ATTR.PRICE, resourcePromptElements);
-            const nores = isNoRes(resourcePromptElements);
-            const hybrid = isHybrid(bpTypeElement);
-            return {damage, firerate, mass, damagepm, damagepc, price, nores, hybrid};
+            return {damage, firerate, mass, damagepm, damagepc, price};
+        }
+
+        function getWorseProtection(bp1, bp2) {
+            return getWorseOf(bp1, bp2,
+                [bp1.impact?.val, bp1.stability?.val, bp2.mass?.val],
+                [bp2.impact?.val, bp2.stability?.val, bp1.mass?.val]
+            );
         }
 
         function parseProtectionBlueprint(row) {
             const promptElements = getTablePrompts(row);
             const resourcePromptElements = getResourceTablePrompts(row);
-            const bpTypeElement = getBlueprintType(row);
             const impact = parseBlueprintAttribute(ATTR.IMPACT, promptElements, ["Impact Rating:", "Dispersal Rating:"]);
             const stability = parseBlueprintAttribute(ATTR.STABILITY, promptElements, "Stability:");
             const mass = parseBlueprintAttribute(ATTR.MASS, promptElements, "Mass:");
             const stabilitypm = parseBlueprintAttribute(ATTR.STABILITYPM, promptElements, "Stability per Mass:");
             const stabilitypc = parseBlueprintAttribute(ATTR.STABILITYPC, promptElements, "Stability per Cost:");
             const price = parseResourceTableAttribute(ATTR.PRICE, resourcePromptElements);
-            const nores = isNoRes(resourcePromptElements);
-            const hybrid = isHybrid(bpTypeElement);
-            return {impact, stability, mass, stabilitypm, stabilitypc, price, nores, hybrid};
+            return {impact, stability, mass, stabilitypm, stabilitypc, price};
+        }
+
+        function getWorsePropulsion(bp1, bp2, ignorePrice = true) {
+            return getWorseOf(bp1, bp2,
+                [bp1.power?.val, bp1.endurance?.val, bp2.mass?.val],
+                [bp2.power?.val, bp2.endurance?.val, bp1.mass?.val]
+            );
         }
 
         function parsePropulsionBlueprint(row) {
             const promptElements = getTablePrompts(row);
             const resourcePromptElements = getResourceTablePrompts(row);
-            const bpTypeElement = getBlueprintType(row);
             const power = parseBlueprintAttribute(ATTR.POWER, promptElements, ["Power:", "Travel Power:"]);
             const endurance = parseBlueprintAttribute(ATTR.ENDURANCE, promptElements, "Endurance:");
             const mass = parseBlueprintAttribute(ATTR.MASS, promptElements, "Mass:");
             const powerpm = parseBlueprintAttribute(ATTR.POWERPM, promptElements, ["Power per Mass:", "Travel Power per Mass:"]);
             const price = parseResourceTableAttribute(ATTR.PRICE, resourcePromptElements);
             const epm = computedAttribute(ATTR.EPM, endurance, safeRatio2(endurance, mass));
-            const nores = isNoRes(resourcePromptElements);
-            const hybrid = isHybrid(bpTypeElement);
-            return {power, endurance, mass, powerpm, price, epm, nores, hybrid};
+            return {power, endurance, mass, powerpm, price, epm};
+        }
+
+        function getWorsePlanetary(bp1, bp2, ignorePrice = true) {
+            return getWorseOf(bp1, bp2,
+                [bp1.personnel?.val, bp1.primarydmg?.val, bp1.primaryrate?.val, bp1.supportbat?.val, bp1.supportdmg?.val, bp1.supportrate?.val],
+                [bp2.personnel?.val, bp2.primarydmg?.val, bp2.primaryrate?.val, bp2.supportbat?.val, bp2.supportdmg?.val, bp2.supportrate?.val]
+            );
         }
 
         function parsePlanetaryBlueprint(row) {
             const promptElements = getTablePrompts(row);
             const resourcePromptElements = getResourceTablePrompts(row);
-            const bpTypeElement = getBlueprintType(row);
             const personnel = parseBlueprintAttribute(ATTR.PERSONNEL, promptElements, "Personnel:");
             const primarydmg = parseBlueprintAttribute(ATTR.PRIMARYDMG, promptElements, "Primary Weapon Damage:");
             const primaryrate = parseBlueprintAttribute(ATTR.PRIMARYRATE, promptElements, "Primary Fire Rate:");
@@ -365,18 +420,33 @@
             const sdps = computedAttribute(ATTR.SDPS, supportdmg, supportdmg.val * supportrate.val);
             const pdpc = computedAttribute(ATTR.PDPC, primarydmg, safeRatio2(pdps, price, 1_000_000));
             const sdpc = computedAttribute(ATTR.SDPC, supportdmg, safeRatio2(sdps, price, 1_000_000));
-            const nores = isNoRes(resourcePromptElements);
-            const hybrid = isHybrid(bpTypeElement);
-            return {personnel, primarydmg, primaryrate, supportbat, supportdmg, supportrate, price, pdps, sdps, pdpc, sdpc, nores, hybrid};
+            return {personnel, primarydmg, primaryrate, supportbat, supportdmg, supportrate, price, pdps, sdps, pdpc, sdpc};
         }
 
-        function colorizeBlueprints(parseFn) {
+        function parseGenericBlueprint(row) {
+            const resourcePromptElements = getResourceTablePrompts(row);
+            const bpTypeElement = getBlueprintType(row);
+            const nores = isNoRes(resourcePromptElements);
+            const hybrid = isHybrid(bpTypeElement);
+            const title = parseTitle(row);
+            return {nores, hybrid, title};
+        }
+
+        function colorizeWorseBlueprint(worsebp, betterbp) {
+            if (worsebp.price.val < betterbp.price.val) {
+                colorizeForeground(worsebp.title.el, COLOR.C_WORSEBP2, `This BP is worse than ${betterbp.title.val}, but has lower price (resources not compared)`);
+            } else {
+                colorizeForeground(worsebp.title.el, COLOR.C_WORSEBP1, `This BP is worse than ${betterbp.title.val} (resources not compared)`);
+            }
+        }
+
+        function colorizeBlueprints(parseFn, worseFn) {
             const allRows = getBlueprintRows();
             if (!allRows || allRows.length === 0) return;
             const bpList = [];
             for (const row of allRows) {
                 try {
-                    bpList.push(parseFn(row));
+                    bpList.push({...parseFn(row), ...parseGenericBlueprint(row)});
                 } catch (e) {
                     ignoreNoElementError(e);
                 }
@@ -385,21 +455,30 @@
             for (const bp of bpList) {
                 colorizeBP(bp, extremes);
             }
+            if (worseFn && bpList.length > 1) {
+                for (let i = 0; i < bpList.length; i += 1) {
+                    for (let j = i + 1; j < bpList.length; j += 1) {
+                        const result = worseFn(bpList[i], bpList[j]);
+                        if (!result) continue;
+                        colorizeWorseBlueprint(...result);
+                    }
+                }
+            }
         }
 
         const urlstr = document.URL;
         if (urlstr.match(/type=[123]&subtype=/i)) {
-            colorizeBlueprints(parseFacilityBlueprint);
+            colorizeBlueprints(parseFacilityBlueprint, getWorseFacility);
         } else if (urlstr.match(/type=4&subtype=/i)) {
-            colorizeBlueprints(parseHullBlueprint);
+            colorizeBlueprints(parseHullBlueprint, getWorseHull);
         } else if (urlstr.match(/type=5&subtype=/i)) {
-            colorizeBlueprints(parseWeaponBlueprint);
+            colorizeBlueprints(parseWeaponBlueprint, getWorseWeapon);
         } else if (urlstr.match(/type=6&subtype=/i)) {
-            colorizeBlueprints(parseProtectionBlueprint);
+            colorizeBlueprints(parseProtectionBlueprint, getWorseProtection);
         } else if (urlstr.match(/type=7&subtype=/i)) {
-            colorizeBlueprints(parsePropulsionBlueprint);
+            colorizeBlueprints(parsePropulsionBlueprint, getWorsePropulsion);
         } else if (urlstr.match(/type=8&subtype=/i)) {
-            colorizeBlueprints(parsePlanetaryBlueprint);
+            colorizeBlueprints(parsePlanetaryBlueprint, getWorsePlanetary);
         }
 
     }
