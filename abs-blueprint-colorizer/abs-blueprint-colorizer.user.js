@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Blueprints Colorizer
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.12.2
+// @version      0.12.3
 // @description  Parses and highlights best/worst/most effective blueprints (per attribute)
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-blueprint-colorizer/abs-blueprint-colorizer.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-blueprint-colorizer/abs-blueprint-colorizer.user.js
@@ -48,6 +48,8 @@
             QUALITY: {n: 'quality/effectiveness'},
             COSTPW: {n: 'cost-per-worker', r: true},
             GUNS: {n: 'guns'},
+            BATTERIES: {n: 'batteries'},
+            FIGHTERS: {n: 'fighters'},
             TRANSPORT: {n: 'transport'},
             COLONISTS: {n: 'colonists'},
             SCANNER: {n: 'scanner'},
@@ -316,8 +318,8 @@
 
         function getWorseHull(bp1, bp2) {
             return getWorseOf(bp1, bp2,
-                [bp1.guns?.val, bp1.transport?.val, bp1.colonists?.val, bp1.scanner?.val, bp1.layout?.val, bp1.engines?.val, bp2.mpe?.val],
-                [bp2.guns?.val, bp2.transport?.val, bp2.colonists?.val, bp2.scanner?.val, bp2.layout?.val, bp2.engines?.val, bp1.mpe?.val]
+                [bp1.guns?.val, bp1.batteries?.val, bp1.transport?.val, bp1.colonists?.val, bp1.scanner?.val, bp1.layout?.val, bp1.engines?.val, bp2.mpe?.val],
+                [bp2.guns?.val, bp2.batteries?.val, bp2.transport?.val, bp2.colonists?.val, bp2.scanner?.val, bp2.layout?.val, bp2.engines?.val, bp1.mpe?.val]
             );
         }
 
@@ -325,6 +327,8 @@
             const promptElements = getTablePrompts(row);
             const resourcePromptElements = getResourceTablePrompts(row);
             const guns = parseBlueprintAttribute(ATTR.GUNS, promptElements, "Forward Gun Cluster:");
+            const batteries = parseBlueprintAttribute(ATTR.BATTERIES, promptElements, "Gun Battery Mounts:");
+            const fighters = parseBlueprintAttribute(ATTR.FIGHTERS, promptElements, "Fighter Capacity:");
             const transport = parseBlueprintAttribute(ATTR.TRANSPORT, promptElements, "Transport Capacity:");
             const colonists = parseBlueprintAttribute(ATTR.COLONISTS, promptElements, "Colonists Capacity:");
             const scanner = parseBlueprintAttribute(ATTR.SCANNER, promptElements, "Scanner Level:");
@@ -339,7 +343,7 @@
             const ccpm = computedAttribute(ATTR.CCPM, colonists, safeRatio2(colonists, mass));
             const lpm = computedAttribute(ATTR.LPM, layout, safeRatio2(layout, mass));
             const mpe = computedAttribute(ATTR.MPE, mass, safeRatio2(mass, engines));
-            return {guns, transport, colonists, scanner, layout, engines, price, ppg, gpm, spm, tcpm, ccpm, lpm, mpe}
+            return {guns, batteries, fighters, transport, colonists, scanner, layout, engines, price, ppg, gpm, spm, tcpm, ccpm, lpm, mpe}
         }
 
         function getWorseWeapon(bp1, bp2) {
