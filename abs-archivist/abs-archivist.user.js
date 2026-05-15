@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Archivist
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.21.5
+// @version      0.22.0
 // @description  Parses and stores various entities while browsing AtmoBurn; see Tampermonkey menu for some actions; see abs-awacs for in-game UI
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
@@ -765,7 +765,7 @@
             f.name = useDefault(stripTags(f.name));
             Parsing.fixRelation(f);
             Parsing.fixUndefined(f);
-            Parsing.setDefaultsIfNotDefined(f, {colony: null, world: null, system: null, x: null, y: null, z: null});
+            Parsing.setDefaultsIfNotDefined(f, {colony: null, world: null, system: null, x: null, y: null, z: null, location: null});
         },
         sanitizeColony: function (c) {
             c.name = useDefault(stripTags(c.name));
@@ -814,6 +814,29 @@
             wormholes.push(wh);
         }
 
+        async function _processWormholeExits(wormholeList) {
+            const counts = new Map();
+            for (const wh of wormholeList) {
+                counts.set(wh.name, (counts.get(wh.name) ?? 0) + 1);
+            }
+            const unpaired = wormholeList.filter(wh => counts.get(wh.name) === 1);
+            const exitRallyPoints = [];
+            for (const uwh of unpaired) {
+                exitRallyPoints.push({
+                    id: `#u.${uwh.id}`,
+                    name: `Exit of ${uwh.name}`,
+                    x: uwh.tx,
+                    y: uwh.ty,
+                    z: uwh.tz,
+                    relation: Relation.Neutral,
+                    type: 'L',
+                    ts: now,
+                    src: Source.WORMHOLE_LIST,
+                });
+            }
+            await ADB.bulkStore('rp', exitRallyPoints, true);
+        }
+
         const empiredb = !!document.URL.match(/empiredb=1/) ? 1 : 0
         // get all lines
         const mid = byId('midcolumn');
@@ -826,6 +849,7 @@
         }
 
         await ADB.bulkStore('wh', wormholeList, true);
+        await _processWormholeExits(wormholeList);
         storeTimestamp(empiredb === 1 ? StoredTimestamps.WormholesEmpire : StoredTimestamps.WormholesMy, now);
     }
 
@@ -1112,7 +1136,7 @@
             if (sig.id && sig.name) {
                 await enrichFleetLocation(sig);
                 Parsing.sanitizeSignature(sig);
-                if (! await checkForMatchingFleetBySignature(sig)) {
+                if (!await checkForMatchingFleetBySignature(sig)) {
                     signatures.push(sig);
                 }
             } else {
