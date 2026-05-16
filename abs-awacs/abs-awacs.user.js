@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - AWACS
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.19.3
+// @version      0.19.4
 // @description  UI for abs-archivist - display nearest fleets, colonies, rally points in various contexts; uses data produced by abs-archivist
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
@@ -305,7 +305,7 @@ a.icon { text-decoration: none !important; }
             columns,
             layout: "fitColumns",
             height: `calc(100vh - ${headHeight}px)`,
-            initialSort: [{column: "name", dir: "asc"},{column: "dist", dir: "asc"}],
+            initialSort: [{column: "name", dir: "asc"}, {column: "dist", dir: "asc"}],
             ...options,
         });
 
@@ -670,15 +670,17 @@ a.icon { text-decoration: none !important; }
         const systems = await db.system.toArray();
         const wormholes = await db.wh.toArray();
         const systemMap = new Map(systems.map(s => [s.id, s]));
-        systemMap.set(-1, {id: -1, name: "start", x: row.x, y: row.y, z: row.z})
-        systemMap.set(-2, {id: -2, name: "end", x: refPoint.x, y: refPoint.y, z: refPoint.z})
+        systemMap.set(-1, {id: -1, name: "start", x: refPoint.x, y: refPoint.y, z: refPoint.z})
+        systemMap.set(-2, {id: -2, name: "end", x: row.x, y: row.y, z: row.z})
         const pathResult = _findShortestPath(systemMap, wormholes, -1, -2);
         if (pathResult) {
             _determineSteps(systemMap, wormholes, pathResult);
-            const stepsString = pathResult.steps.join("\n");
-            window.alert(`Path found, distance is ${round2(pathResult.distance / 1_000_000)} km, steps:\n${stepsString}`);
+            const msg = `Path found, distance is ${round2(pathResult.distance / 1_000_000)} km`;
+            window.alert(msg + ", for steps see browser console");
+            console.info(msg + `, steps:\n${pathResult.steps.join("\n")}`);
         } else {
             window.alert("Path not found!");
+            console.warn("Path not found!");
         }
     }
 
