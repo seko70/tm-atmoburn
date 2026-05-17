@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Archivist
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.22.0
+// @version      0.24.0
 // @description  Parses and stores various entities while browsing AtmoBurn; see Tampermonkey menu for some actions; see abs-awacs for in-game UI
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
@@ -190,6 +190,10 @@
         }
     }
 
+    function createLocation(colony, world, system) {
+        return [colony, world, system].filter(s => s != null && s !== '').join(', ') || null;
+    }
+
     // --- IndexedDB helpers -------------------------------------------------------
 
     const ADB = {
@@ -347,15 +351,24 @@
         }
         if (f.colony) { // translate colony ID to system ID
             const colony = await db.colony.get(f.colony);
-            if (colony) return safeCopy(f, ['world', 'system', 'x', 'y', 'z'], colony);
+            if (colony) {
+                f.location = createLocation(colony.name, colony.location);
+                return safeCopy(f, ['world', 'system', 'x', 'y', 'z'], colony);
+            }
         }
         if (f.world) { // translate world ID to system ID
             const world = await fetchWorldInfo(f.world);
-            if (world) return safeCopy(f, ['system', 'x', 'y', 'z'], world);
+            if (world) {
+                f.location = createLocation(null, world.name);
+                return safeCopy(f, ['system', 'x', 'y', 'z'], world);
+            }
         }
         if (f.system) { // translate system ID to global coordinates
             const system = await fetchSystemInfo(f.system);
-            if (system) return copyXYZ(f, system);
+            if (system) {
+                f.location = createLocation(null, null, system.name);
+                return copyXYZ(f, system);
+            }
         }
         return false;
     }
@@ -442,6 +455,23 @@
         return false;
     }
 
+    // find fleet matching given outpost; return true if found
+    async function checkForMatchingOutpost(outp) {
+        let matchingFleet;
+        if (outp.system) {
+            // check for fleets with same position, world and player etc; not by name because of rename!
+            matchingFleet = await db.fleet.where('system').equals(outp.system).filter(
+                f => f.world === outp.world && f.player === outp.player
+            ).first();
+        } else {
+            // check for fleets with same position, world and player etc; not by name because of rename!
+            matchingFleet = await db.fleet.where('name').equals(outp.name).filter(
+                f => f.system == null && f.player === outp.player && f.x === outp.x && f.y === outp.y && f.z === outp.z
+            ).first();
+        }
+        return !!(matchingFleet);
+    }
+
     // async job to clean duplicate signatures (heuristics ahead!)
     async function signatureCleanup() {
         // phase 1 - readonly scan, collecting IDs for delete
@@ -450,7 +480,7 @@
         for (const sig of allSignatures) {
             const shouldDelete = await checkForMatchingFleetBySignature(sig);
             if (shouldDelete) {
-                xdebug("Signature can be deleted - matching fleet(s) found", sig)
+                xdebug("Signature can be deleted - matching fleet(s) found", sig);
                 idsToDelete.push(sig.id);
             }
         }
@@ -458,6 +488,25 @@
         if (idsToDelete.length > 0) {
             await db.signature.bulkDelete(idsToDelete);
             console.info("signatureCleanup completed, deleted signatures: " + idsToDelete.length);
+        }
+    }
+
+    // async job to clean duplicate outposts (heuristics ahead!)
+    async function outpostCleanup() {
+        // phase 1 - readonly scan, collecting IDs for delete
+        const idsToDelete = [];
+        const allOutposts = await db.outpost.toArray();
+        for (const outp of allOutposts) {
+            const shouldDelete = await checkForMatchingOutpost(outp);
+            if (shouldDelete) {
+                xdebug("Outpost can be deleted - matching fleet(s) found", outp);
+                idsToDelete.push(outp.id);
+            }
+        }
+        // phase 2 - delete expired/duplicate outposts
+        if (idsToDelete.length > 0) {
+            await db.outpost.bulkDelete(idsToDelete);
+            console.info("outpostCleanup completed, deleted outposts: " + idsToDelete.length);
         }
     }
 
@@ -486,7 +535,7 @@
             const worldLink = subtitleElement.querySelector('a[onclick*="showPlanet"]');
             Parsing.parseWorldInfoFromLink(worldLink, colony, 'world', 'worldName');
             assert(colony.world, `No world determined for colony #${cid}`);
-            colony.location = colony['worldName'] || colony['systemName'];
+            colony.location = createLocation(null, colony['worldName'], colony['systemName']);
             // parse colony name
             colony.name = stripTags(Parsing.textContent(
                 mid.querySelector('.pagetitle > div.flex_center') ?? mid.querySelector('.pagetitle')
@@ -519,7 +568,7 @@
                 if (Parsing.parseWorldInfoFromLink(link, fleet, 'world', 'worldName')) return;
                 Parsing.parseSystemInfoFromLink(link, fleet, 'system', 'systemName');
             });
-            fleet.location = fleet['colonyName'] || fleet['worldName'] || fleet['systemName'];
+            fleet.location = createLocation(fleet['colonyName'], fleet['worldName'], fleet['systemName']);
             // check for confed/shared fleets
             const shared = Parsing.textContent(byId('midcolumn').querySelector('div.subtext'));
             if (shared && shared === 'Shared empire access') {
@@ -621,7 +670,7 @@
                     const plink = row.querySelector('a[href*="/message.php?player="]');
                     assert(plink);
                     obj.player = Parsing.textContent(plink);
-                    obj.location = obj['worldName'] || obj['systemName'];
+                    obj.location = createLocation(null, obj['worldName'], obj['systemName']);
                     objects.push(obj);
                     obj = null;
                 }
@@ -781,6 +830,7 @@
                 if (Parsing.parseGlobalInfoFromLink(locLink, f, 'x', 'y', 'z')) return;
                 throw new Error(`Unknown location for fleet #${f.id}: ${locLink}`);
             } else if (refObj) {
+                xdebug("Local object/colony?", locLink);
                 safeCopy(f, ['system', 'world', 'x', 'y', 'z', 'location'], refObj) // not a link, probably local object/colony
             }
         },
@@ -1062,7 +1112,9 @@
                 colonies.push(obj);
             } else if (obj.type === 'outpost') {
                 Parsing.sanitizeOutpost(obj);
-                outposts.push(obj);
+                if (!await checkForMatchingOutpost(obj)) {
+                    outposts.push(obj);
+                }
             } else {
                 xerror('parseFuelBunker - unknown record type', obj);
             }
@@ -1215,6 +1267,7 @@
                 xlog(`Fleet Overview: ${urlstr}`);
                 setTimeout(safeAsync(parseMyFleetsOverview), 100);
                 setTimeout(safeAsync(signatureCleanup), 1000);
+                setTimeout(safeAsync(outpostCleanup), 1000);
             } else if (urlstr.match(/atmoburn\.com\/fleet\.php/i) || urlstr.match(/atmoburn\.com\/fleet\//i)) {
                 xlog(`Fleet: ${urlstr}`);
                 setTimeout(safeAsync(parseFleetScreen), 500);
@@ -1230,9 +1283,11 @@
                 xlog(`Scan: ${urlstr}`);
                 setTimeout(safeAsync(parseScan), 500);
                 setTimeout(safeAsync(signatureCleanup), 1000);
+                setTimeout(safeAsync(outpostCleanup), 1000);
             } else if (urlstr.match(/atmoburn\.com\/extras\/fleet_refuel_info.php/i)) {
                 xlog(`Fuel Bunker: ${urlstr}`);
                 setTimeout(safeAsync(parseFuelBunker), 500);
+                setTimeout(safeAsync(outpostCleanup), 1000);
             } else if (urlstr.match(/atmoburn\.com\/rally_points\.php/i)) {
                 xlog(`RP: ${urlstr}`);
                 setTimeout(safeAsync(parseRallyPoints), 100);
