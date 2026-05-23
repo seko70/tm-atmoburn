@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - AWACS
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.19.4
+// @version      0.19.5
 // @description  UI for abs-archivist - display nearest fleets, colonies, rally points in various contexts; uses data produced by abs-archivist
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
@@ -573,8 +573,8 @@ a.icon { text-decoration: none !important; }
      */
     async function findShortestPath(row) {
 
-        function _determineSteps(systemMap, wormholes, pathResult) {
-            const wormholesBySystemId = new Map(wormholes.map(w => [w.system, {name: w.name, from: w.system, to: w.tsystem}]));
+        function _determineSteps(systemMap, wormholes, pathResult, startObj, endObj) {
+            const wormholesBySystemId = new Map(wormholes.map(w => [w.system, {name: w.name, from: w.system, to: w.tsystem, comment: w.comment}]));
             const localSystemDistance = 500; // approx; distance from system entrance and wormhole and/or vice-versa
             let last = null;
             let lastWh = null;
@@ -589,18 +589,18 @@ a.icon { text-decoration: none !important; }
                 }
                 stepNumber += 1;
                 const wh = wormholesBySystemId.get(next);
-                const coordsText = `(${nextSystem.x}, ${nextSystem.y}, ${nextSystem.z})`;
-                const systemText = next < 0 ? coordsText : `s#${next} ${coordsText}`;
+                const coordsText = `${nextSystem.x}, ${nextSystem.y}, ${nextSystem.z}`;
+                const systemText = next < 0 ? `(${coordsText})` : `s#${next} (${coordsText})`;
                 if (!last) {
-                    pathResult.steps.push(`${stepNumber}): Start at ${systemText}`);
+                    pathResult.steps.push(`${stepNumber}): Start at ${startObj.name} ${systemText}`);
                 } else {
                     let dist;
                     if (lastWh && lastWh.to === next) {
                         dist = localSystemDistance;
-                        pathResult.steps.push(`${stepNumber}): Jump : ${systemText} : ${lastWh.name}`);
+                        pathResult.steps.push(`${stepNumber}): Jump to ${systemText} : ${lastWh.name} (${lastWh.comment})`);
                     } else {
                         dist = absDistance(nextSystem, systemMap.get(last)) + 2 * localSystemDistance;
-                        pathResult.steps.push(`${stepNumber}): Transfer : ${systemText} : ${round2(dist / 1_000_000)} mkm`);
+                        pathResult.steps.push(`${stepNumber}): Transfer to ${systemText} : ~ ${Math.round(dist / 1_000_000)} mkm`);
                     }
                     sum += dist;
                 }
@@ -670,12 +670,14 @@ a.icon { text-decoration: none !important; }
         const systems = await db.system.toArray();
         const wormholes = await db.wh.toArray();
         const systemMap = new Map(systems.map(s => [s.id, s]));
-        systemMap.set(-1, {id: -1, name: "start", x: refPoint.x, y: refPoint.y, z: refPoint.z})
-        systemMap.set(-2, {id: -2, name: "end", x: row.x, y: row.y, z: row.z})
-        const pathResult = _findShortestPath(systemMap, wormholes, -1, -2);
+        const startObj = {id: -1, name: refPoint.name ?? "(start)", x: refPoint.x, y: refPoint.y, z: refPoint.z};
+        const endObj = {id: -2, name: row?.name ?? "(end)", x: row.x, y: row.y, z: row.z};
+        systemMap.set(startObj.id, startObj);
+        systemMap.set(endObj.id, endObj);
+        const pathResult = _findShortestPath(systemMap, wormholes, startObj.id, endObj.id);
         if (pathResult) {
-            _determineSteps(systemMap, wormholes, pathResult);
-            const msg = `Path found, distance is ${round2(pathResult.distance / 1_000_000)} km`;
+            _determineSteps(systemMap, wormholes, pathResult, startObj, endObj);
+            const msg = `Path from "${startObj.name}" to "${endObj.name}" found, distance is ~ ${Math.round(pathResult.distance / 1_000_000)} mkm`;
             window.alert(msg + ", for steps see browser console");
             console.info(msg + `, steps:\n${pathResult.steps.join("\n")}`);
         } else {
