@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Archivist
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.24.0
+// @version      0.24.1
 // @description  Parses and stores various entities while browsing AtmoBurn; see Tampermonkey menu for some actions; see abs-awacs for in-game UI
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
@@ -1069,7 +1069,11 @@
                 });
             }
             await ADB.bulkStore('colony', colonies);
-            await deleteMissingColonies(colonies, scanner.world);
+            if (scanner.world && !scanner.colony) { // full scan is available only from world level, not colony level
+                if (colonies.length > 0) { // FIXME: to prevent deleting when scanner has scanner level < 1 !!!
+                    await deleteMissingColonies(colonies, scanner.world);
+                }
+            }
         }
 
         let obj = null;
