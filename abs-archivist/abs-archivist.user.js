@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Archivist
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.24.1
+// @version      0.25.0
 // @description  Parses and stores various entities while browsing AtmoBurn; see Tampermonkey menu for some actions; see abs-awacs for in-game UI
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
@@ -487,7 +487,7 @@
         // phase 2 - delete expired/duplicate signatures
         if (idsToDelete.length > 0) {
             await db.signature.bulkDelete(idsToDelete);
-            console.info("signatureCleanup completed, deleted signatures: " + idsToDelete.length);
+            xlog("signatureCleanup completed, deleted signatures: " + idsToDelete.length);
         }
     }
 
@@ -506,7 +506,7 @@
         // phase 2 - delete expired/duplicate outposts
         if (idsToDelete.length > 0) {
             await db.outpost.bulkDelete(idsToDelete);
-            console.info("outpostCleanup completed, deleted outposts: " + idsToDelete.length);
+            xlog("outpostCleanup completed, deleted outposts: " + idsToDelete.length);
         }
     }
 
@@ -869,25 +869,38 @@
             for (const wh of wormholeList) {
                 counts.set(wh.name, (counts.get(wh.name) ?? 0) + 1);
             }
+            // add "Exit of ..." to Rally points for unpaired wormholes
             const unpaired = wormholeList.filter(wh => counts.get(wh.name) === 1);
-            const exitRallyPoints = [];
-            for (const uwh of unpaired) {
-                exitRallyPoints.push({
-                    id: `#u.${uwh.id}`,
-                    name: `Exit of ${uwh.name}`,
-                    x: uwh.tx,
-                    y: uwh.ty,
-                    z: uwh.tz,
-                    relation: Relation.Neutral,
-                    type: 'L',
-                    ts: now,
-                    src: Source.WORMHOLE_LIST,
-                });
+            if (unpaired.length > 0) {
+                const exitRallyPoints = [];
+                for (const uwh of unpaired) {
+                    exitRallyPoints.push({
+                        id: `#u.${uwh.id}`,
+                        name: `Exit of ${uwh.name}`,
+                        x: uwh.tx,
+                        y: uwh.ty,
+                        z: uwh.tz,
+                        relation: Relation.Neutral,
+                        type: 'L',
+                        ts: now,
+                        src: Source.WORMHOLE_LIST,
+                    });
+                }
+                await ADB.bulkStore('rp', exitRallyPoints, true);
             }
-            await ADB.bulkStore('rp', exitRallyPoints, true);
+            // remove "Exit of ..." from Rally points for paired wormholes eventually
+            const paired = wormholeList.filter(wh => counts.get(wh.name) > 1);
+            const deleteExitRallyPointIds = new Set();
+            for (const pwh of paired) {
+                deleteExitRallyPointIds.add(`#u.${pwh.id}`);
+            }
+            if (deleteExitRallyPointIds.size > 0) {
+                await db.rp.bulkDelete(Array.from(deleteExitRallyPointIds));
+                //xdebug("Deleted obsolete 'Exit of...' RPs " + deleteExitRallyPointIds.size);
+            }
         }
 
-        const empiredb = !!document.URL.match(/empiredb=1/) ? 1 : 0
+        const empiredb = !!document.URL.match(/empiredb=0/) ? 0 : 1
         // get all lines
         const mid = byId('midcolumn');
         const whAddLinks = mid.querySelectorAll('a[href^="/rally_points.php?add=add&type=wormhole"]');
@@ -899,7 +912,7 @@
         }
 
         await ADB.bulkStore('wh', wormholeList, true);
-        await _processWormholeExits(wormholeList);
+        if (empiredb === 1) await _processWormholeExits(wormholeList);
         storeTimestamp(empiredb === 1 ? StoredTimestamps.WormholesEmpire : StoredTimestamps.WormholesMy, now);
     }
 
@@ -1160,7 +1173,7 @@
     }
 
     async function parseSensorNet() {
-        const empiredb = !!document.URL.match(/empiredb=1/) ? 1 : 0;
+        const empiredb = !!document.URL.match(/empiredb=0/) ? 0 : 1;
 
         async function _parseSensorRecord(node, signatures) {
             const divs = node.querySelectorAll(':scope > div');
