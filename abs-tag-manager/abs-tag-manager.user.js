@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Tag Manager
 // @namespace    sk.seko
 // @license      MIT
-// @version      2.3.0
+// @version      2.3.1
 // @description  Simple fleet/colony tagging script; use ALT-T for tagging current fleet/colony
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-tag-manager/abs-tag-manager.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-tag-manager/abs-tag-manager.user.js
@@ -18,7 +18,7 @@
 (function () {
     "use strict";
 
-    const MAX_CHARS = 12;  // max tag length; just in case
+    const MAX_CHARS = 20;  // max tag length; just in case
     const MAX_SUGGESTIONS = 10; // max number of suggestions
     const ZWSP = "\u200B"; // invisible, but harmless character; used to distinguish original label and tags, and to mark already decorated label
 
