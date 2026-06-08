@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - AWACS
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.19.5
+// @version      0.19.6
 // @description  UI for abs-archivist - display nearest fleets, colonies, rally points in various contexts; uses data produced by abs-archivist
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
@@ -339,8 +339,9 @@ a.icon { text-decoration: none !important; }
         if (o.id && o.colony) return `tpos=colony&tsystem=${s}&x=${o.colony}&y=-1&z=-1&tfleet=${o.id}`;
         if (o.world) return `tworld=${o.world}`;
         if (o.x === null) return null;
-        if (o.id && o.system) return `tpos=system&tsystem=${s}&x=${o.x}&y=${o.y}&z=${o.z}&tfleet=${o.id}`;
-        return `tpos=global&x=${o.x}&y=${o.y}&z=${o.z}&tfleet=${o.id}`;
+        if (o.id && o.system) return `tpos=global&tsystem=${s}&x=${o.x}&y=${o.y}&z=${o.z}&tfleet=${o.id}`;
+        if (o.id) return `tpos=global&x=${o.x}&y=${o.y}&z=${o.z}&tfleet=${o.id}`;
+        return `tpos=global&x=${o.x}&y=${o.y}&z=${o.z}`;
     }
 
     function _computeLaunchLink(objType, obj) {
