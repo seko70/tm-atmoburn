@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Blueprints Colorizer
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.12.3
+// @version      0.13.0
 // @description  Parses and highlights best/worst/most effective blueprints (per attribute)
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-blueprint-colorizer/abs-blueprint-colorizer.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-blueprint-colorizer/abs-blueprint-colorizer.user.js
@@ -81,7 +81,9 @@
             SPM: {n: 'scanner-per-mass', c: true},
             GPM: {n: 'guns-per-mass', c: true},
             TCPM: {n: 'transport-capacity-per-mass', c: true},
+            PPTC: {n: 'price-per-transport-capacity', r: true, c: true},
             CCPM: {n: 'colonists-capacity-per-mass', c: true},
+            PPCC: {n: 'price-per-colonists-capacity', r: true, c: true},
             LPM: {n: 'layout-per-mass', c: true},
             EPM: {n: 'endurance-per-mass', c: true},
             PDPS: {n: 'primary-damage-per-second', c: true},
@@ -340,10 +342,12 @@
             const gpm = computedAttribute(ATTR.GPM, guns, safeRatio2(guns, mass, 1000));
             const spm = computedAttribute(ATTR.SPM, scanner, safeRatio2(scanner, mass, 1000));
             const tcpm = computedAttribute(ATTR.TCPM, transport, safeRatio2(transport, mass));
+            const pptc = computedAttribute(ATTR.PPTC, transport, safeRatio2(price, transport));
             const ccpm = computedAttribute(ATTR.CCPM, colonists, safeRatio2(colonists, mass));
+            const ppcc = computedAttribute(ATTR.PPTC, colonists, safeRatio2(price, colonists));
             const lpm = computedAttribute(ATTR.LPM, layout, safeRatio2(layout, mass));
             const mpe = computedAttribute(ATTR.MPE, mass, safeRatio2(mass, engines));
-            return {guns, batteries, fighters, transport, colonists, scanner, layout, engines, price, ppg, gpm, spm, tcpm, ccpm, lpm, mpe}
+            return {guns, batteries, fighters, transport, colonists, scanner, layout, engines, price, ppg, gpm, spm, tcpm, pptc, ccpm, ppcc, lpm, mpe}
         }
 
         function getWorseWeapon(bp1, bp2) {
