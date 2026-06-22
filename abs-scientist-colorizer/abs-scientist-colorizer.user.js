@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Scientists Colorizer
 // @namespace    sk.seko
 // @license      MIT
-// @version      1.1.1
+// @version      1.1.2
 // @description  Parses and highlights best skill for every scientis and top 5 scientists for all skills
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-scientist-colorizer/abs-scientist-colorizer.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-scientist-colorizer/abs-scientist-colorizer.user.js
@@ -23,6 +23,7 @@
 
         const COLOR = {
             C_GREY: '#333333',
+            C_GREEN: '#009900',
             C_RED: '#cc0000',
             C_TOP: {
                 0: '#33cc33',
@@ -90,7 +91,7 @@
                 const maxValue = Math.max(...row.slice(1)); // ignore ING for best scientist skill
                 const maxIndexes = row.map((value, index) => index > 0 && value === maxValue ? index : -1).filter(index => index !== -1);
                 for (const i of maxIndexes) {
-                    elementsMatrix[rowIndex][i].style.border = `1px solid ${COLOR.C_GREY}`;
+                    elementsMatrix[rowIndex][i].style.border = `1px solid ${COLOR.C_GREEN}`;
                     //elementsMatrix[rowIndex][i].style.background = COLOR.C_GREY;
                 }
             });
