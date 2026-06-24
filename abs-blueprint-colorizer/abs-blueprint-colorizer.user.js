@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Blueprints Colorizer
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.13.0
+// @version      0.14.0
 // @description  Parses and highlights best/worst/most effective blueprints (per attribute)
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-blueprint-colorizer/abs-blueprint-colorizer.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-blueprint-colorizer/abs-blueprint-colorizer.user.js
@@ -371,8 +371,8 @@
 
         function getWorseProtection(bp1, bp2) {
             return getWorseOf(bp1, bp2,
-                [bp1.impact?.val, bp1.stability?.val, bp2.mass?.val],
-                [bp2.impact?.val, bp2.stability?.val, bp1.mass?.val]
+                [bp1.impact?.val, bp1.stability?.val, bp1.stabilitypm?.val, bp1.stabilitypc?.val],
+                [bp2.impact?.val, bp2.stability?.val, bp2.stabilitypm?.val, bp2.stabilitypc?.val]
             );
         }
 
