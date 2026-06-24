@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Archivist
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.25.0
+// @version      0.26.0
 // @description  Parses and stores various entities while browsing AtmoBurn; see Tampermonkey menu for some actions; see abs-awacs for in-game UI
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
@@ -44,15 +44,13 @@
         system: ['id', 'name', 'x', 'y', 'z', 'galaxy'],
         world: ['id', 'name', 'system', 'x', 'y', 'z'],
         colony: ['id', 'name', 'x', 'y', 'z', 'world', 'system', 'player', 'faction', 'relation', 'location', 'population', 'size', 'ts', 'src'],
-        fleet: ['id', 'name', 'x', 'y', 'z', 'system', 'world', 'colony', 'player', 'faction', 'relation', 'signature', 'location', 'speed', 'ships', 'tonnage', 'roster', 'ts', 'src'],
+        fleet: ['id', 'name', 'x', 'y', 'z', 'system', 'world', 'colony', 'player', 'faction', 'relation', 'signature', 'location', 'speed', 'ships', 'tonnage', 'roster', 'explorer', 'ts', 'src'],
         rp: ['id', 'name', 'x', 'y', 'z', 'relation', 'type', 'comment', 'ts', 'src'],
         wh: ['id', 'name', 'system', 'x', 'y', 'z', 'tsystem', 'tx', 'ty', 'tz', 'comment', 'ts', 'src'],
         signature: ['id', 'name', 'x', 'y', 'z', 'system', 'world', 'colony', 'player', 'faction', 'relation', 'location', 'speed', 'ships', 'tonnage', 'roster', 'ts', 'src'],
         outpost: ['id', 'name', 'x', 'y', 'z', 'system', 'world', 'colony', 'player', 'relation', 'location', 'ts', 'src'],
         relation: ['id', 'relation', `ts`, 'src'],
     };
-
-    //const STATIC_DATA = ['world', 'system', 'colony', 'wh', 'rp']; // these data are not changed during the game
 
     const Relation = {
         MY: 'm',
@@ -581,6 +579,11 @@
             // ranges
             fleet.range = safeInteger(Parsing.textContent(byId('fleetRange')));
             fleet.maxRange = safeInteger(Parsing.textContent(byId('fleetMaxRange')));
+            // explorer info
+            const objective = byId('objective');
+            if (objective) {
+                fleet.explorer = !!objective.querySelector(':scope > option[value="explore"]:not(:disabled)');
+            }
             return fleet;
         },
 
@@ -805,7 +808,7 @@
             if (typeof f.tonnage != 'number') f.tonnage = safeFloat(f.tonnage);
             if (!f.roster || !f.roster.length || f.roster === '""') f.roster = null;
             Parsing.fixUndefined(f);
-            Parsing.setDefaultsIfNotDefined(f, {colony: null, world: null, system: null, x: null, y: null, z: null, location: null});
+            Parsing.setDefaultsIfNotDefined(f, {colony: null, world: null, system: null, x: null, y: null, z: null, location: null, explorer: null});
         },
         sanitizeSignature: function (s) {
             Parsing.sanitizeFleet(s); // for now it is the same as fleet (except "signature" an "id" fields)
@@ -1082,10 +1085,8 @@
                 });
             }
             await ADB.bulkStore('colony', colonies);
-            if (scanner.world && !scanner.colony) { // full scan is available only from world level, not colony level
-                if (colonies.length > 0) { // FIXME: to prevent deleting when scanner has scanner level < 1 !!!
-                    await deleteMissingColonies(colonies, scanner.world);
-                }
+            if (scanner.world && scanner.explorer) { // delete colonies only if scanner is actually able to see all world colonies
+                await deleteMissingColonies(colonies, scanner.world);
             }
         }
 
