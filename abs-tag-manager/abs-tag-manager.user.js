@@ -2,14 +2,16 @@
 // @name         AtmoBurn Services - Tag Manager
 // @namespace    sk.seko
 // @license      MIT
-// @version      2.3.1
+// @version      2.4.0
 // @description  Simple fleet/colony tagging script; use ALT-T for tagging current fleet/colony
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-tag-manager/abs-tag-manager.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-tag-manager/abs-tag-manager.user.js
 // @homepageURL  https://github.com/seko70/tm-atmoburn/blob/main/abs-tag-manager/README.md
 // @match        https://*.atmoburn.com/*
-// @exclude    	 https://*.atmoburn.com/extras/view_universe.php*
+// @exclude      https://*.atmoburn.com/extras/view_universe.php*
 // @require      https://cdn.jsdelivr.net/npm/dexie@4.2.1/dist/dexie.min.js
+// @run-at       document-idle
+// @noframes
 // ==/UserScript==
 
 /* jshint esversion: 11 */
@@ -18,7 +20,7 @@
 (function () {
     "use strict";
 
-    const MAX_CHARS = 20;  // max tag length; just in case
+    const MAX_CHARS = 20; // max tag length; just in case
     const MAX_SUGGESTIONS = 10; // max number of suggestions
     const ZWSP = "\u200B"; // invisible, but harmless character; used to distinguish original label and tags, and to mark already decorated label
 
@@ -202,11 +204,18 @@
     const db = new Dexie('AtmoBurnTagsDB');
     db.version(1).stores({
         colony: '&id',
-        fleet: '&id'
+        fleet: '&id',
+        pending_colony: '&id',
+        pending_fleet: '&id'
     });
+
+    const PENDING_RECORD_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
     // Tag DB manipulation functions
     class TagDB {
+
+        static PENDING_RECORD_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
         static async saveTags(objectType, id, tagList) {
             return await db.table(objectType).put({id, tagList});
         }
@@ -220,8 +229,49 @@
             return db.table(objectType).delete(id);
         }
 
-        static async deleteRecords(objectType, idList) {
-            return db.table(objectType).bulkDelete(idList);
+        static pendingTable(objectType) {
+            return db.table(`pending_${objectType}`);
+        }
+
+        // remove records for ids in idList if present
+        static async unmarkRecords(objectType, idList) {
+            return TagDB.pendingTable(objectType).bulkDelete(idList);
+        }
+
+        // insert timestamp to pending_<OBJECT_TYPE> table for ids in idList if not present
+        static async markRecords(objectType, idList) {
+            if (!Array.isArray(idList)) throw new TypeError('idList must be an array.');
+            const uniqueIds = [...new Set(idList.filter(id => id !== null && id !== undefined))];
+            if (uniqueIds.length === 0) return 0;
+            const pendingTable = TagDB.pendingTable(objectType);
+            return db.transaction('rw', pendingTable, async () => {
+                const existingRecords = await pendingTable.bulkGet(uniqueIds);
+                const timestamp = Date.now();
+                const recordsToAdd = uniqueIds
+                    .filter((id, index) => existingRecords[index] === undefined)
+                    .map(id => ({id, timestamp}));
+                if (recordsToAdd.length > 0) await pendingTable.bulkAdd(recordsToAdd);
+                return recordsToAdd.length;
+            });
+        }
+
+        static async purgeRecords(objectType) {
+            const recordsTable = db.table(objectType);
+            const pendingTable = TagDB.pendingTable(objectType);
+            const oldestAllowedTimestamp = Date.now() - PENDING_RECORD_MAX_AGE_MS;
+            return db.transaction('rw', recordsTable, pendingTable, async () => {
+                    const expiredPendingRecords = await pendingTable
+                        .filter(record => typeof record.timestamp === 'number' && record.timestamp < oldestAllowedTimestamp)
+                        .toArray();
+                    if (expiredPendingRecords.length === 0) {
+                        return 0;
+                    }
+                    const expiredIds = expiredPendingRecords.map(record => record.id);
+                    // FIXME await recordsTable.bulkDelete(expiredIds);
+                    // FIXME await pendingTable.bulkDelete(expiredIds);
+                    return expiredIds.length;
+                }
+            );
         }
 
         // returns object/map: {"1093: [{"name": "OOF","color": "#ff0000"},...], ...}
@@ -533,12 +583,17 @@
         }
 
         function removeUnusedTags(tags, type, usedIds) {
-            if (!usedIds || !usedIds.length) return; // just in case: do not remove anything, if no ID was used (may be error...)
+            if (!usedIds || !usedIds.length) return; // just in case: do not remove anything, if no ID was used (may be an error!)
+            TagDB.unmarkRecords(type, usedIds); // if was previouse marked for deletion, unmark it - because they exist, after all!
             const usedIdsSet = new Set(usedIds);
             const idsToRemove = [...tags.keys()].filter(id => !usedIdsSet.has(id));
             if (idsToRemove && idsToRemove.length > 0) {
-                console.info(`Removing tags for nonexisting objects of type '${type}':`, idsToRemove);
-                TagDB.deleteRecords(type, idsToRemove);
+                const recordsMarked = TagDB.markRecords(type, idsToRemove)
+                console.info(`Marked ${recordsMarked} records of ${type} for deletion`);
+                if (recordsMarked > 0) {
+                    const recordsPurged = TagDB.purgeRecords(type);
+                    console.info(`Purged (deleted) ${recordsPurged} records of ${type}`);
+                }
             }
         }
 
@@ -580,6 +635,19 @@
             });
         }
 
+        function decorateStarlog(colonyTags, fleetTags) {
+            const starlog = document.getElementById('midcolumn');
+            if (!starlog) return;
+            // const colonies = starlog.querySelectorAll(':scope div.starlog_colony  > div:nth-of-type(2)');
+            _decorateObjectList(colonyTags, (objectId) => {
+                return starlog.querySelectorAll(`a[href$="/view_colony.php?colony=${objectId}"]`);
+            });
+            //const fleets = starlog.querySelectorAll(':scope div.starlog_fleet  > div:nth-of-type(2)');
+            _decorateObjectList(fleetTags, (objectId) => {
+                return starlog.querySelectorAll(`a[href$="/fleet.php?fleet=${objectId}"]`);
+            });
+        }
+
         function openDialog(objectType, objectId) {
             TagManagerUI.open({
                 objectType: objectType,
@@ -616,7 +684,17 @@
             console.error("TM: decorateSome - unknown objectType:", objectType);
         }
 
+        function checkSanePage() {
+            const fleetList = document.getElementById('fleetlist');
+            if (fleetList) {
+                const fc = fleetList.querySelectorAll('a[href="/fleet_configuration.php"]')
+                if (fc) return;
+            }
+            throw new Error("Page incomplete - not processing!");
+        }
+
         try {
+            checkSanePage();
             const urlstr = document.URL;
             const colonyTags = await TagDB.getAllRecordsMap("colony")
             const fleetTags = await TagDB.getAllRecordsMap("fleet")
@@ -636,6 +714,8 @@
                 decorateOverviewColonies(colonyTags);
             } else if (urlstr.match(/atmoburn\.com\/overview.php\?view=2/i)) {
                 decorateOverviewFleets(fleetTags);
+            } else if (urlstr.match(/atmoburn\.com\/starlog.php.*/i)) {
+                decorateStarlog(colonyTags, fleetTags);
             }
             decorateColonySideList(colonyTags, true);
             decorateFleetSideList(fleetTags, true);
