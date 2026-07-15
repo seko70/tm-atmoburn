@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Tag Manager
 // @namespace    sk.seko
 // @license      MIT
-// @version      2.4.0
+// @version      2.4.1
 // @description  Simple fleet/colony tagging script; use ALT-T for tagging current fleet/colony
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-tag-manager/abs-tag-manager.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-tag-manager/abs-tag-manager.user.js
@@ -244,7 +244,7 @@
             const uniqueIds = [...new Set(idList.filter(id => id !== null && id !== undefined))];
             if (uniqueIds.length === 0) return 0;
             const pendingTable = TagDB.pendingTable(objectType);
-            return db.transaction('rw', pendingTable, async () => {
+            return await db.transaction('rw', pendingTable, async () => {
                 const existingRecords = await pendingTable.bulkGet(uniqueIds);
                 const timestamp = Date.now();
                 const recordsToAdd = uniqueIds
@@ -582,16 +582,16 @@
             return objectsDecorated;
         }
 
-        function removeUnusedTags(tags, type, usedIds) {
+        async function removeUnusedTags(tags, type, usedIds) {
             if (!usedIds || !usedIds.length) return; // just in case: do not remove anything, if no ID was used (may be an error!)
-            TagDB.unmarkRecords(type, usedIds); // if was previouse marked for deletion, unmark it - because they exist, after all!
+            await TagDB.unmarkRecords(type, usedIds); // if was previouse marked for deletion, unmark it - because they exist, after all!
             const usedIdsSet = new Set(usedIds);
             const idsToRemove = [...tags.keys()].filter(id => !usedIdsSet.has(id));
             if (idsToRemove && idsToRemove.length > 0) {
-                const recordsMarked = TagDB.markRecords(type, idsToRemove)
+                const recordsMarked = await TagDB.markRecords(type, idsToRemove);
                 console.info(`Marked ${recordsMarked} records of ${type} for deletion`);
                 if (recordsMarked > 0) {
-                    const recordsPurged = TagDB.purgeRecords(type);
+                    const recordsPurged = await TagDB.purgeRecords(type);
                     console.info(`Purged (deleted) ${recordsPurged} records of ${type}`);
                 }
             }
