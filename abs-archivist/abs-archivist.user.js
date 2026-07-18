@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Archivist
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.26.0
+// @version      0.26.2
 // @description  Parses and stores various entities while browsing AtmoBurn; see Tampermonkey menu for some actions; see abs-awacs for in-game UI
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
@@ -88,6 +88,8 @@
     const XYZ_REGEX = /^\s*(-*\d+)[,\s]+(-*\d+)[,\s]+(-*\d+)/;
     // regex pattern to match and capture x,y,z coordinates (URL)
     const XYZ_URL_REGEX = /\\?x=(-?\d+)&y=(-?\d+)&z=(-?\d+)/;
+    // expiration perdod for signatures (unless paired with fleet ID!); in seconds
+    const MAX_SIGNATURE_AGE_SECONDS = 3600 * 24 * 30; // 30 days
     // current date
     const now = Date.now();
     // player name (current, lazy initialized
@@ -432,8 +434,19 @@
         return w;
     }
 
+    function fixUnknown(obj, attrName, value) {
+        if (!obj) return false;
+        if (!value) return false;
+        if (value.toLowerCase() === "unknown") return false;
+        if (!obj[attrName] || obj[attrName].toLowerCase() === "unknown") {
+            obj[attrName] = value;
+            return true;
+        }
+        return false;
+    }
+
     // find fleet matchnig given signature, and update the fleet eventually; return true if found
-    async function checkForMatchingFleetBySignature(sig) {
+    async function findMatchingFleetBySignature(sig) {
         // check for fleets with same signature first...
         let matchingFleet = await db.fleet.where('signature').equals(sig.id).first();
         if (!matchingFleet) {
@@ -442,15 +455,21 @@
                 f => f.player === sig.player && f.x === sig.x && f.y === sig.y && f.z === sig.z
             ).first();
         }
-        if (matchingFleet) {
-            // update matching fleet if it is old enough
-            if (isOlderThan(matchingFleet.ts, sig.ts, 3600)) {
-                safeCopy(matchingFleet, ['system', 'world', 'x', 'y', 'z', 'location'], sig);
-                await ADB.store('fleet', matchingFleet);
-            }
-            return true; // we don't need this signature anymore - there is a fleet recorded
+        return matchingFleet;
+    }
+
+    // find fleet matchnig given signature, and update the fleet eventually; return true if found
+    async function updateMatchingFleetBySignature(matchingFleet, sig) {
+        // update matching fleet if it is old enough
+        let store = fixUnknown(matchingFleet, "name", sig.name);
+        if (store) {
+            safeCopy(matchingFleet, ['player', 'faction', 'ships', 'tonnage', 'speed', 'roster', 'ts'], sig);
         }
-        return false;
+        if (isOlderThan(matchingFleet.ts, sig.ts, 3600)) {
+            safeCopy(matchingFleet, ['system', 'world', 'x', 'y', 'z', 'location', 'ts'], sig);
+            store = true;
+        }
+        if (store) await ADB.store('fleet', matchingFleet);
     }
 
     // find fleet matching given outpost; return true if found
@@ -476,9 +495,12 @@
         const idsToDelete = [];
         const allSignatures = await db.signature.toArray();
         for (const sig of allSignatures) {
-            const shouldDelete = await checkForMatchingFleetBySignature(sig);
-            if (shouldDelete) {
+            const matchnigFleet = await findMatchingFleetBySignature(sig);
+            if (matchnigFleet) {
+                await updateMatchingFleetBySignature(matchnigFleet, sig);
                 xdebug("Signature can be deleted - matching fleet(s) found", sig);
+                idsToDelete.push(sig.id);
+            } else if (isOlderThan(sig.ts, now, MAX_SIGNATURE_AGE_SECONDS)) {
                 idsToDelete.push(sig.id);
             }
         }
@@ -1206,7 +1228,10 @@
             if (sig.id && sig.name) {
                 await enrichFleetLocation(sig);
                 Parsing.sanitizeSignature(sig);
-                if (!await checkForMatchingFleetBySignature(sig)) {
+                const matchingFleet = await findMatchingFleetBySignature(sig);
+                if (matchingFleet) {
+                    await updateMatchingFleetBySignature(matchingFleet, sig);
+                } else {
                     signatures.push(sig);
                 }
             } else {
