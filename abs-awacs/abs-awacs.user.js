@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - AWACS
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.19.6
+// @version      0.21.2
 // @description  UI for abs-archivist - display nearest fleets, colonies, rally points in various contexts; uses data produced by abs-archivist
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
@@ -13,8 +13,8 @@
 // @require      https://cdn.jsdelivr.net/npm/dexie@4.2.1/dist/dexie.min.js
 // @require      https://github.com/seko70/tm-atmoburn/raw/refs/tags/commons/abs-utils/v1.2.2/commons/abs-utils.js
 // @require      https://github.com/seko70/tm-atmoburn/raw/refs/tags/commons/atmoburn-service-db/v1.2.0/commons/atmoburn-service-db.js
-// @resource     TABULATOR_JS  https://unpkg.com/tabulator-tables@6.3.1/dist/js/tabulator.min.js
-// @resource     TABULATOR_CSS https://unpkg.com/tabulator-tables@6.3.1/dist/css/tabulator_site_dark.min.css
+// @resource     TABULATOR_JS  https://unpkg.com/tabulator-tables@6.5.2/dist/js/tabulator.min.js
+// @resource     TABULATOR_CSS https://unpkg.com/tabulator-tables@6.5.2/dist/css/tabulator_site_dark.min.css
 // @grant        GM_registerMenuCommand
 // @grant        GM_getResourceText
 // @grant        GM_setClipboard
@@ -375,6 +375,10 @@ a.icon { text-decoration: none !important; }
     function _fillFrom(objType, icon, o) {
         const havePosition = o.x != null;
         const directions = havePosition ? absDirections(refPoint, o) : [null, null];
+        const direct_dist = havePosition ? absDistance(refPoint, o) : null;
+        const pathResult = (objType === Type.Colony && havePosition && o.system)
+            ? PathFinder.cachedPathFindingFunction(-1, o.system)
+            : null;
         return {
             id: o.id,
             sig: o.signature,
@@ -400,19 +404,46 @@ a.icon { text-decoration: none !important; }
             world: o.world,
             colony: o.colony,
             location: o.location,
-            dist: havePosition ? absDistance(refPoint, o) : null,
+            dist: direct_dist,
+            path: pathResult ? pathResult.distance : null,
+            pathSteps: pathResult ? pathResult.path : null,
             horiz: havePosition ? `${directions.arrow} ${directions.clock}'` : null,
             vert: havePosition ? `${directions.v}º` : null,
             ts: o.ts,
         };
     }
 
+    async function initializePathfinding(usedSystemIds, extraSystems) {
+        const systems = await db.system.toArray();
+        const wormholes = await db.wh.toArray();
+        const wormholeSystems = new Set();
+        for (const w of wormholes) {
+            wormholeSystems.add(w.system).add(w.tsystem);
+        }
+        const systemMap = new Map(
+            systems.filter(s => usedSystemIds.has(s.id) || wormholeSystems.has(s.id)).map(s => [s.id, s])
+        );
+        for (const s of extraSystems) {
+            systemMap.set(s.id, s);
+        }
+        //xlog("initializePathfinding: systemMap=", systemMap)
+        //xlog("initializePathfinding: wormholes=", wormholes)
+        PathFinder.pathFindingFunction = PathFinder.createShortestPathFinder(systemMap, wormholes);
+    }
+
     async function addAllColonies(data) {
-        await db.colony.each(c => {
+        const colonies = await db.colony.toArray();
+        // initialize pathfinding
+        const usedSystemIds = new Set(colonies.map(colony => colony.system));
+        await initializePathfinding(usedSystemIds, [
+            {id: -1, name: refPoint.name ?? "(start)", x: refPoint.x, y: refPoint.y, z: refPoint.z}
+        ]);
+        for (const c of colonies) {
             if (!dialogProfile.rel || dialogProfile.rel === c.relation) {
                 data.push(_fillFrom(Type.Colony, ICON.Colony, c));
+                usedSystemIds.add(c.system);
             }
-        });
+        }
     }
 
     async function addAllFleets(data) {
@@ -487,6 +518,10 @@ a.icon { text-decoration: none !important; }
             const r = cell.getRow().getData();
             return `${_u("Horizontal direction", r.horiz)}<br>${_u("Vertical direction", r.vert)}`;
         },
+        PATH: function (e, cell, _onRendered) {
+            const r = cell.getRow().getData();
+            return r.pathSteps ? r.pathSteps.join(",") : null;
+        },
         SIZE: function (e, cell, _onRendered) {
             return `${_u("Roster", cell.getRow().getData().roster)}`;
         },
@@ -511,6 +546,10 @@ a.icon { text-decoration: none !important; }
                 });
             }
             return dist;
+        },
+        PATH: function (cell, formatterParams, onRendered) {
+            const distkm = cell.getValue();
+            return distkm == null ? null : (Math.round(distkm / 10_000) / 100).toFixed(2);
         },
         TS: function (cell, formatterParams, onRendered) {
             const ts = cell.getValue();
@@ -619,7 +658,7 @@ a.icon { text-decoration: none !important; }
                 usedSystemIds.add(wh.system);
                 usedSystemIds.add(wh.tsystem);
             }
-            console.debug('usedSystemIds', usedSystemIds);
+            //console.debug('usedSystemIds', usedSystemIds);
             const distances = new Map();
             const previous = new Map();
             const visited = new Set();
@@ -684,6 +723,163 @@ a.icon { text-decoration: none !important; }
         } else {
             window.alert("Path not found!");
             console.warn("Path not found!");
+        }
+    }
+
+    class PathFinder {
+        //static systemMap;
+        //static wormholes;
+        //static wormholesBySystemId;
+        //static wormholeMap;
+        static pathFindingFunction = null;
+        static resultCache = new Map();
+
+        static cachedPathFindingFunction(startId, endId) {
+            if (!PathFinder.pathFindingFunction) return null;
+            const key = `${startId}-${endId}`;
+            let result = PathFinder.resultCache.get(key);
+            if (result !== undefined) {
+                return result;
+            }
+            result = PathFinder.pathFindingFunction(startId, endId);
+            PathFinder.resultCache.set(key, result);
+            return result;
+        }
+
+        static createShortestPathFinder(systemMap, wormholes) {
+            function getSystem(id) {
+                const system = systemMap.get(id);
+                if (!system || !Number.isFinite(system.x) || !Number.isFinite(system.y) || !Number.isFinite(system.z)) {
+                    throw new Error(`Unknown or invalid system: ${id}`);
+                }
+                return system;
+            }
+
+            function distance(x1, y1, z1, x2, y2, z2) {
+                const [dx, dy, dz] = [x1 - x2, y1 - y2, z1 - z2];
+                return Math.round(4000.0 * Math.sqrt(dx * dx + dy * dy + dz * dz));
+            }
+
+            const fromIds = [];
+            const toIds = [];
+            const whNames = [];
+
+            const fromX = [];
+            const fromY = [];
+            const fromZ = [];
+
+            const toX = [];
+            const toY = [];
+            const toZ = [];
+
+            // remove duplicate wormholes
+            const seen = new Map();
+
+            function addWormhole(fromId, toId, whName) {
+                let targets = seen.get(fromId);
+                if (!targets) {
+                    targets = new Set();
+                    seen.set(fromId, targets);
+                }
+                if (targets.has(toId)) return;
+                targets.add(toId);
+                const from = getSystem(fromId);
+                const to = getSystem(toId);
+                fromIds.push(fromId);
+                toIds.push(toId);
+                whNames.push(whName);
+                fromX.push(from.x);
+                fromY.push(from.y);
+                fromZ.push(from.z);
+                toX.push(to.x);
+                toY.push(to.y);
+                toZ.push(to.z);
+            }
+
+            for (const {system, tsystem, name} of wormholes) {
+                addWormhole(system, tsystem, name);
+            }
+
+            const count = fromIds.length;
+            const transfers = new Float64Array(count * count);
+            for (let u = 0; u < count; u++) {
+                const row = u * count;
+                for (let v = 0; v < count; v++) {
+                    transfers[row + v] = distance(toX[u], toY[u], toZ[u], fromX[v], fromY[v], fromZ[v]);
+                }
+            }
+
+            // repeatedly used workspace
+            const distances = new Float64Array(count);
+            const previous = new Int32Array(count);
+            const visited = new Uint8Array(count);
+
+            return function findShortestPath(startId, endId) {
+                if (startId === endId) {
+                    return {startId, endId, distance: 0, path: [startId],};
+                }
+
+                const start = systemMap.get(startId);
+                const end = systemMap.get(endId);
+                if (!start || !end) return null;
+                distances.fill(Infinity);
+                previous.fill(-1);
+                visited.fill(0);
+
+                // direct path is the default (no wormholes)
+                let bestDistance = distance(start.x, start.y, start.z, end.x, end.y, end.z);
+                let bestLastWormhole = -1;
+                for (let i = 0; i < count; i++) {
+                    distances[i] = distance(start.x, start.y, start.z, fromX[i], fromY[i], fromZ[i]);
+                }
+
+                // linear search is better for complete graph
+                for (let step = 0; step < count; step++) {
+                    let current = -1;
+                    let currentDistance = Infinity;
+                    for (let i = 0; i < count; i++) {
+                        if (!visited[i] && distances[i] < currentDistance) {
+                            current = i;
+                            currentDistance = distances[i];
+                        }
+                    }
+                    if (current === -1 || currentDistance >= bestDistance) break;
+                    visited[current] = 1;
+                    const distanceToEnd = currentDistance + distance(toX[current], toY[current], toZ[current], end.x, end.y, end.z);
+                    if (distanceToEnd < bestDistance) {
+                        bestDistance = distanceToEnd;
+                        bestLastWormhole = current;
+                    }
+                    const row = current * count;
+                    for (let next = 0; next < count; next++) {
+                        if (visited[next]) continue;
+                        const candidate = currentDistance + transfers[row + next];
+                        if (candidate < distances[next]) {
+                            distances[next] = candidate;
+                            previous[next] = current;
+                        }
+                    }
+                }
+
+                // wormholes does not shortened the path
+                if (bestLastWormhole === -1) {
+                    return {startId, endId, distance: bestDistance, path: null,};
+                }
+
+                // determine the path
+                const wormholePath = [];
+                for (let current = bestLastWormhole; current !== -1; current = previous[current]) {
+                    wormholePath.push(current);
+                }
+                wormholePath.reverse();
+                const path = [];
+
+                for (const wormholeIndex of wormholePath) {
+                    path.push(whNames[wormholeIndex]);
+                }
+
+                return {startId, endId, distance: bestDistance, path,};
+            };
         }
     }
 
@@ -752,6 +948,7 @@ a.icon { text-decoration: none !important; }
             REL: "Player relation; (m)e,(f)riend,(n)eutral,(e)nemy",
             ACT: "Action buttons",
             DIST: `Distance from ${refPoint.name}, in mkm`,
+            PATH: `Shortest path, using wormholes, in mkm (only between systems, for now)`,
             DIR: `O’clock direction from ${refPoint.name}; relative vertical direction (in degrees) is in tooltip`,
         };
         // collect/compute/process data
@@ -762,27 +959,41 @@ a.icon { text-decoration: none !important; }
         if (dialogProfile.whs) await addAllWormholes(data);
         // define columns
         let columns = [
-            {title: "#", formatter: "rownum", width: 40, hozAlign: "center", headerSort: false},
+            {title: "#", formatter: "rownum", width: 40, hozAlign: "center", headerSort: false, download: false},
             {title: "ID", field: "id", headerFilter: true, width: 60, headerTooltip: HTT.ID},
             {title: "Sig", field: "sig", headerFilter: true, width: 60, headerTooltip: HTT.SIG},
             {title: "Name", field: "name", headerFilter: true, minWidth: 130, formatter: FMT.NAME, tooltip: TT.NAME},
             {title: "Detail", field: "comment", headerFilter: true, minWidth: 90, tooltip: TT.REL},
-            {title: "", field: "actions", minWidth: 20, width: 25, hozAlign: "center", headerSort: false, formatter: FMT.MENU, clickMenu: CLCK.MENU},
+            {
+                title: "", field: "actions", minWidth: 20, width: 25, hozAlign: "center", headerSort: false,
+                formatter: FMT.MENU, clickMenu: CLCK.MENU, download: false
+            },
             {title: "Player", field: "player", headerFilter: true, minWidth: 70, formatter: FMT.REF_COLOR_FG},
             {title: "Rel", field: "rel", headerFilter: true, width: 50, headerSort: false, formatter: FMT.REF_COLOR_FG, headerTooltip: HTT.REL},
 //            {title: "Position", field: "position", headerFilter: true, minWidth: 40, maxWidth: 200, hozAlign: "right", tooltip: TT.REL},
-            {title: "Dist", field: "dist", hozAlign: "right", width: 70, sorter: "number", headerTooltip: HTT.DIST, formatter: FMT.FIXED2},
+            {title: "X", field: "x", visible: false, download: true},
+            {title: "Y", field: "y", visible: false, download: true},
+            {title: "Z", field: "z", visible: false, download: true},
+            {
+                title: "Dist", field: "dist", hozAlign: "right", width: 70, sorter: "number",
+                headerTooltip: HTT.DIST, formatter: FMT.FIXED2, download: false
+            },
+            {
+                title: "Path", field: "path", hozAlign: "right", width: 70, sorter: "number",
+                headerTooltip: HTT.PATH, formatter: FMT.PATH, tooltip: TT.PATH, download: false
+            },
             {title: "Dir", field: "horiz", hozAlign: "right", headerFilter: true, width: 50, headerSort: false, headerTooltip: HTT.DIR, tooltip: TT.DIR},
-            {title: "Pop", field: "pop", hozAlign: "right", width: 60, sorter: "number"},
+            {title: "Pop", field: "pop", hozAlign: "right", headerFilter: "input", headerFilterFunc: "smart", width: 60, sorter: "number"},
             {title: "Size", field: "size", hozAlign: "right", width: 60, sorter: "number"},
             {title: "Ships", field: "ships", hozAlign: "right", width: 65, sorter: "number", tooltip: TT.SIZE},
-            {title: "Tons", field: "tonnage", hozAlign: "right", width: 60, sorter: "number"},
+            {title: "Tons", field: "tonnage", hozAlign: "right", headerFilter: "input", headerFilterFunc: "smart", width: 60, sorter: "number"},
             {title: "Updated", field: "ts", headerSort: false, minWidth: 70, maxWidth: 120, formatter: FMT.TS, tooltip: TT.UPDATED}
         ];
         // remove columns if not appropriate
-        if (!dialogProfile.colonies) columns = columns.filter(c => !["pop", "size"].includes(c.field));
+        if (!dialogProfile.colonies) columns = columns.filter(c => !["pop", "size", "path"].includes(c.field));
         if (!dialogProfile.fleets) columns = columns.filter(c => !["sig", "ships", "tonnage"].includes(c.field));
         if (!dialogProfile.fleets && !dialogProfile.colonies) columns = columns.filter(c => !["player", "id"].includes(c.field));
+
         // create table
         try {
             return await buildTabulatorInPopup({
