@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Archivist
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.26.2
+// @version      0.26.3
 // @description  Parses and stores various entities while browsing AtmoBurn; see Tampermonkey menu for some actions; see abs-awacs for in-game UI
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-archivist/abs-archivist.user.js
@@ -476,12 +476,12 @@
     async function checkForMatchingOutpost(outp) {
         let matchingFleet;
         if (outp.system) {
-            // check for fleets with same position, world and player etc; not by name because of rename!
+            // check for fleets with same system, world and player etc; not by name because of rename!
             matchingFleet = await db.fleet.where('system').equals(outp.system).filter(
                 f => f.world === outp.world && f.player === outp.player
             ).first();
         } else {
-            // check for fleets with same position, world and player etc; not by name because of rename!
+            // check for fleets with no system, same coordinates and player etc; not by name because of rename!
             matchingFleet = await db.fleet.where('name').equals(outp.name).filter(
                 f => f.system == null && f.player === outp.player && f.x === outp.x && f.y === outp.y && f.z === outp.z
             ).first();
@@ -1107,7 +1107,7 @@
                 });
             }
             await ADB.bulkStore('colony', colonies);
-            if (scanner.world && scanner.explorer) { // delete colonies only if scanner is actually able to see all world colonies
+            if (scanner.world && (scanner.explorer || scanner.isColony)) { // delete colonies only if scanner is actually able to see all world colonies
                 await deleteMissingColonies(colonies, scanner.world);
             }
         }
@@ -1118,6 +1118,7 @@
         if (oid) { // scan from colony?
             obj = await db.colony.get(oid);
             assert(obj.relation === Relation.MY);
+            obj.isColony = 1;
         }
         if (!oid) { // scan from fleet?
             oid = Parsing.parseFleetIdFromURL();
@@ -1305,7 +1306,7 @@
     (async () => {
         try {
             const urlstr = document.URL;
-            //xdebug(`Processing url=${urlstr}`);
+            // xdebug(`Processing url=${urlstr}`);
             if (urlstr.match(/atmoburn\.com\/overview\.php\?view=2/i)) {
                 xlog(`Fleet Overview: ${urlstr}`);
                 setTimeout(safeAsync(parseMyFleetsOverview), 100);

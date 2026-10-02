@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - Tag Manager
 // @namespace    sk.seko
 // @license      MIT
-// @version      2.4.1
+// @version      2.4.3
 // @description  Simple fleet/colony tagging script; use ALT-T for tagging current fleet/colony
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-tag-manager/abs-tag-manager.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-tag-manager/abs-tag-manager.user.js
@@ -698,6 +698,7 @@
             const urlstr = document.URL;
             const colonyTags = await TagDB.getAllRecordsMap("colony")
             const fleetTags = await TagDB.getAllRecordsMap("fleet")
+            console.debug(`ATM: Processing url=${urlstr}`);
             if (urlstr.match(/atmoburn\.com\/[a-zA-Z_]+\.php\?colony=/i)) {
                 const objectId = parseIdFromURL(COLONY_ID_RE);
                 if (objectId) {
@@ -714,7 +715,7 @@
                 decorateOverviewColonies(colonyTags);
             } else if (urlstr.match(/atmoburn\.com\/overview.php\?view=2/i)) {
                 decorateOverviewFleets(fleetTags);
-            } else if (urlstr.match(/atmoburn\.com\/starlog.php.*/i)) {
+            } else if (urlstr.match(/atmoburn\.com\/starlog.*/i)) {
                 decorateStarlog(colonyTags, fleetTags);
             }
             decorateColonySideList(colonyTags, true);
