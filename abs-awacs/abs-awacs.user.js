@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - AWACS
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.21.2
+// @version      0.21.3
 // @description  UI for abs-archivist - display nearest fleets, colonies, rally points in various contexts; uses data produced by abs-archivist
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
@@ -454,7 +454,7 @@ a.icon { text-decoration: none !important; }
         });
         await db.signature.each(f => {
             if (!dialogProfile.rel || dialogProfile.rel === f.relation) {
-                data.push(_fillFrom(Type.Fleet, ICON.Fleet, {...f, id: null, signature: f.id, comment: '(signature scan)'}));
+                data.push(_fillFrom(Type.Fleet, ICON.Fleet, {...f, id: null, signature: f.id, comment: '(scan)'}));
             }
         });
         await db.outpost.each(f => {
@@ -962,13 +962,13 @@ a.icon { text-decoration: none !important; }
             {title: "#", formatter: "rownum", width: 40, hozAlign: "center", headerSort: false, download: false},
             {title: "ID", field: "id", headerFilter: true, width: 60, headerTooltip: HTT.ID},
             {title: "Sig", field: "sig", headerFilter: true, width: 60, headerTooltip: HTT.SIG},
-            {title: "Name", field: "name", headerFilter: true, minWidth: 130, formatter: FMT.NAME, tooltip: TT.NAME},
-            {title: "Detail", field: "comment", headerFilter: true, minWidth: 90, tooltip: TT.REL},
+            {title: "Name", field: "name", headerFilter: true, minWidth: 130, maxWidth: 300, formatter: FMT.NAME, tooltip: TT.NAME},
+            {title: "Detail", field: "comment", headerFilter: true, minWidth: 130, tooltip: TT.REL},
             {
                 title: "", field: "actions", minWidth: 20, width: 25, hozAlign: "center", headerSort: false,
                 formatter: FMT.MENU, clickMenu: CLCK.MENU, download: false
             },
-            {title: "Player", field: "player", headerFilter: true, minWidth: 70, formatter: FMT.REF_COLOR_FG},
+            {title: "Player", field: "player", headerFilter: true, minWidth: 70, maxWidth: 120, formatter: FMT.REF_COLOR_FG},
             {title: "Rel", field: "rel", headerFilter: true, width: 50, headerSort: false, formatter: FMT.REF_COLOR_FG, headerTooltip: HTT.REL},
 //            {title: "Position", field: "position", headerFilter: true, minWidth: 40, maxWidth: 200, hozAlign: "right", tooltip: TT.REL},
             {title: "X", field: "x", visible: false, download: true},
