@@ -9,7 +9,7 @@
 // @match          https://*.atmoburn.com/fleet.php*
 // @match          https://*.atmoburn.com/fleet/*
 // @grant          none
-// @version        5.0.0
+// @version        5.1.0
 // ==/UserScript==
 
 // version 1.0 - init
@@ -25,6 +25,7 @@
 // version 4.0.1 - fixed "local targets"; fixed Up and Down distances
 // version 4.0.2 - esversion set to 11
 // version 4.1.0 - small fixes; added "Entrance (global)"
+// version 5.1.0 - z-axis change for direct movement now accepts angle in "degrees" (-90 to 90), not "z difference"
 
 /* jshint esversion: 11 */
 /* jshint node: true */
@@ -97,7 +98,7 @@ function select_changed() {
             hide_target_table(1);
             let clock = null;
             while (!clock || clock.trim() === '') {
-                clock = prompt("o'Direction (clock, 1-12):", "12");
+                clock = prompt("o'Horizontal direction (clock, 1-12, like 3, or 3.5, etc):", "12");
                 if (clock === null) return;
             }
             let distance = null;
@@ -106,15 +107,17 @@ function select_changed() {
                 if (distance === null) return;
             }
             distance = fixDistance(distance);
-            let z = null;
-            while (z == null) {
-                z = prompt("Z axis variance in km (or mkm is suffix 'm' is used); optional:", "0");
-                if (z === null) return;
+            let vdeg = null;
+            while (vdeg == null) {
+                vdeg = prompt("o'Vertical direction (degrees, -90 to 90):", "0");
+                if (vdeg === null) return;
             }
-            const angle = clock_to_angle_rad(clock.trim());
-            const x = fleetInfo.x + Math.round(distance * Math.cos(angle) / 4000);
-            const y = fleetInfo.y + Math.round(distance * Math.sin(angle) / 4000);
-            xyzNode.value = `${x},${y},${Math.round(fleetInfo.z + fixDistance(z) / 4000)}`;
+            const hangle = clock_to_angle_rad(clock.trim());
+            const vangle = deg2rad(vdeg);
+            const x = fleetInfo.x + Math.round(distance * Math.cos(vangle) * Math.cos(hangle) / 4000);
+            const y = fleetInfo.y + Math.round(distance * Math.cos(vangle) * Math.sin(hangle) / 4000);
+            const z = fleetInfo.z + Math.round(distance * Math.sin(vangle) / 4000);
+            xyzNode.value = `${x},${y},${z}`;
             break;
         }
         default: {
@@ -131,6 +134,7 @@ function select_changed() {
             break;
         }
     }
+    byId("wfsCtrl").value = "";
 }
 
 function hide_target_table(onoff) {
@@ -215,21 +219,21 @@ function createUI() {
     opt0.setAttribute("value", "");
     opt0.appendChild(document.createTextNode("Select..."));
     sel.appendChild(opt0);
-    // opt1
+    // move 1 up
     if (localTarget) {
         const opt1 = document.createElement("option");
         opt1.setAttribute("value", "1up");
         opt1.appendChild(document.createTextNode("Above"));
         sel.appendChild(opt1);
     }
-    // opt2
+    // move 1 down
     if (localTarget) {
         const opt2 = document.createElement("option");
         opt2.setAttribute("value", "1down");
         opt2.appendChild(document.createTextNode("Below"));
         sel.appendChild(opt2);
     }
-    // opt3
+    // move to specified horizontal direction and distance, and optionally vertical direction
     if (globalTarget) {
         const opt3 = document.createElement("option");
         opt3.setAttribute("value", "dm");
