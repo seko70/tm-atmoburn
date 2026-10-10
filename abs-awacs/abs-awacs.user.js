@@ -2,7 +2,7 @@
 // @name         AtmoBurn Services - AWACS
 // @namespace    sk.seko
 // @license      MIT
-// @version      0.21.3
+// @version      0.21.5
 // @description  UI for abs-archivist - display nearest fleets, colonies, rally points in various contexts; uses data produced by abs-archivist
 // @updateURL    https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
 // @downloadURL  https://github.com/seko70/tm-atmoburn/raw/refs/heads/main/abs-awacs/abs-awacs.user.js
@@ -376,7 +376,7 @@ a.icon { text-decoration: none !important; }
         const havePosition = o.x != null;
         const directions = havePosition ? absDirections(refPoint, o) : [null, null];
         const direct_dist = havePosition ? absDistance(refPoint, o) : null;
-        const pathResult = (objType === Type.Colony && havePosition && o.system)
+        const pathResult = ([Type.Colony, Type.WH, Type.RP].includes(objType) && havePosition && o.system)
             ? PathFinder.cachedPathFindingFunction(-1, o.system)
             : null;
         return {
@@ -426,54 +426,50 @@ a.icon { text-decoration: none !important; }
         for (const s of extraSystems) {
             systemMap.set(s.id, s);
         }
-        //xlog("initializePathfinding: systemMap=", systemMap)
-        //xlog("initializePathfinding: wormholes=", wormholes)
         PathFinder.pathFindingFunction = PathFinder.createShortestPathFinder(systemMap, wormholes);
     }
 
-    async function addAllColonies(data) {
+    async function addAllColonies(usedSystemIds, objects) {
         const colonies = await db.colony.toArray();
-        // initialize pathfinding
-        const usedSystemIds = new Set(colonies.map(colony => colony.system));
-        await initializePathfinding(usedSystemIds, [
-            {id: -1, name: refPoint.name ?? "(start)", x: refPoint.x, y: refPoint.y, z: refPoint.z}
-        ]);
+        colonies.forEach(c => usedSystemIds.add(c.system));
         for (const c of colonies) {
             if (!dialogProfile.rel || dialogProfile.rel === c.relation) {
-                data.push(_fillFrom(Type.Colony, ICON.Colony, c));
-                usedSystemIds.add(c.system);
+                objects.push({type: Type.Colony, icon: ICON.Colony, object: c});
             }
         }
     }
 
-    async function addAllFleets(data) {
+    async function addAllFleets(usedSystemIds, objects) {
         await db.fleet.each(f => {
             if (!dialogProfile.rel || dialogProfile.rel === f.relation) {
-                data.push(_fillFrom(Type.Fleet, ICON.Fleet, f));
+                objects.push({type: Type.Fleet, icon: ICON.Fleet, object: f});
             }
         });
         await db.signature.each(f => {
             if (!dialogProfile.rel || dialogProfile.rel === f.relation) {
-                data.push(_fillFrom(Type.Fleet, ICON.Fleet, {...f, id: null, signature: f.id, comment: '(scan)'}));
+                objects.push({type: Type.Fleet, icon: ICON.Fleet, object: {...f, id: null, signature: f.id, comment: '(scan)'}});
             }
         });
         await db.outpost.each(f => {
             if (!dialogProfile.rel || dialogProfile.rel === f.relation) {
-                data.push(_fillFrom(Type.Fleet, ICON.Fleet, {...f, id: null, comment: '(outpost)'}));
+                objects.push({type: Type.Fleet, icon: ICON.Fleet, object: {...f, id: null, comment: '(outpost)'}});
             }
         });
     }
 
-    async function addAllWormholes(data) {
-        await db.wh.each(wh => {
-            data.push(_fillFrom(Type.WH, ICON.WH, wh));
-        });
+    async function addAllWormholes(usedSystemIds, objects) {
+        const wormholes = await db.wh.toArray();
+        wormholes.forEach(wh => usedSystemIds.add(wh.system));
+        for (const wh of wormholes) {
+            objects.push({type: Type.WH, icon: ICON.WH, object: wh});
+        }
     }
 
-    async function addAllRallyPoints(data) {
-        await db.rp.each(rp => {
-            data.push(_fillFrom(Type.RP, ICON.RP, rp));
-        });
+    async function addAllRallyPoints(usedSystemIds, objects) {
+        const rps = await db.rp.toArray();
+        for (const rp of rps) {
+            objects.push({type: Type.RP, icon: ICON.RP, object: rp});
+        }
     }
 
     function formatMinutesCompact(totalMinutes) {
@@ -608,129 +604,7 @@ a.icon { text-decoration: none !important; }
         resetAwacsWindowInPlace().catch(console.error);
     }
 
-    /**
-     * Find shortes path from system "startId" to system "endId", using "wormholes". Input param formats:
-     */
-    async function findShortestPath(row) {
-
-        function _determineSteps(systemMap, wormholes, pathResult, startObj, endObj) {
-            const wormholesBySystemId = new Map(wormholes.map(w => [w.system, {name: w.name, from: w.system, to: w.tsystem, comment: w.comment}]));
-            const localSystemDistance = 500; // approx; distance from system entrance and wormhole and/or vice-versa
-            let last = null;
-            let lastWh = null;
-            let sum = 0;
-            let stepNumber = 0;
-            pathResult.steps = [];
-            for (const next of pathResult.path) {
-                const nextSystem = systemMap.get(next);
-                if (!nextSystem) {
-                    console.error(`System #${next} not found`);
-                    return;
-                }
-                stepNumber += 1;
-                const wh = wormholesBySystemId.get(next);
-                const coordsText = `${nextSystem.x}, ${nextSystem.y}, ${nextSystem.z}`;
-                const systemText = next < 0 ? `(${coordsText})` : `s#${next} (${coordsText})`;
-                if (!last) {
-                    pathResult.steps.push(`${stepNumber}): Start at ${startObj.name} ${systemText}`);
-                } else {
-                    let dist;
-                    if (lastWh && lastWh.to === next) {
-                        dist = localSystemDistance;
-                        pathResult.steps.push(`${stepNumber}): Jump to ${systemText} : ${lastWh.name} (${lastWh.comment})`);
-                    } else {
-                        dist = absDistance(nextSystem, systemMap.get(last)) + 2 * localSystemDistance;
-                        pathResult.steps.push(`${stepNumber}): Transfer to ${systemText} : ~ ${Math.round(dist / 1_000_000)} mkm`);
-                    }
-                    sum += dist;
-                }
-                last = next;
-                lastWh = wh;
-            }
-        }
-
-        function _findShortestPath(systemMap, wormholes, startId, endId) {
-            const wormholeMap = new Map();
-            const usedSystemIds = new Set([startId, endId]);
-            for (const wh of wormholes) {
-                if (!wormholeMap.has(wh.system)) wormholeMap.set(wh.system, new Set());
-                wormholeMap.get(wh.system).add(wh.tsystem);
-                usedSystemIds.add(wh.system);
-                usedSystemIds.add(wh.tsystem);
-            }
-            //console.debug('usedSystemIds', usedSystemIds);
-            const distances = new Map();
-            const previous = new Map();
-            const visited = new Set();
-            for (const systemId of usedSystemIds) {
-                distances.set(systemId, Infinity);
-                previous.set(systemId, null);
-            }
-            distances.set(startId, 0);
-            while (visited.size < usedSystemIds.size) {
-                let currentId = null;
-                let currentDist = Infinity;
-                for (const [id, d] of distances) {
-                    if (!visited.has(id) && d < currentDist) {
-                        currentDist = d;
-                        currentId = id;
-                    }
-                }
-                if (currentId === null) break;
-                if (currentId === endId) break;
-                visited.add(currentId);
-                const current = systemMap.get(currentId);
-                for (const nextSystemId of usedSystemIds) {
-                    if (visited.has(nextSystemId) || nextSystemId === currentId) continue;
-                    let cost;
-                    if (wormholeMap.get(currentId)?.has(nextSystemId)) {
-                        cost = 0;
-                    } else {
-                        cost = absDistance(current, systemMap.get(nextSystemId));
-                    }
-                    const candidate = currentDist + cost;
-                    if (candidate < distances.get(nextSystemId)) {
-                        distances.set(nextSystemId, candidate);
-                        previous.set(nextSystemId, currentId);
-                    }
-                }
-            }
-            const path = [];
-            let node = endId;
-            while (node !== null) {
-                path.unshift(node);
-                node = previous.get(node);
-            }
-            if (path[0] !== startId) {
-                return null;
-            }
-            return {startId, endId, distance: distances.get(endId), path};
-        }
-
-        const systems = await db.system.toArray();
-        const wormholes = await db.wh.toArray();
-        const systemMap = new Map(systems.map(s => [s.id, s]));
-        const startObj = {id: -1, name: refPoint.name ?? "(start)", x: refPoint.x, y: refPoint.y, z: refPoint.z};
-        const endObj = {id: -2, name: row?.name ?? "(end)", x: row.x, y: row.y, z: row.z};
-        systemMap.set(startObj.id, startObj);
-        systemMap.set(endObj.id, endObj);
-        const pathResult = _findShortestPath(systemMap, wormholes, startObj.id, endObj.id);
-        if (pathResult) {
-            _determineSteps(systemMap, wormholes, pathResult, startObj, endObj);
-            const msg = `Path from "${startObj.name}" to "${endObj.name}" found, distance is ~ ${Math.round(pathResult.distance / 1_000_000)} mkm`;
-            window.alert(msg + ", for steps see browser console");
-            console.info(msg + `, steps:\n${pathResult.steps.join("\n")}`);
-        } else {
-            window.alert("Path not found!");
-            console.warn("Path not found!");
-        }
-    }
-
     class PathFinder {
-        //static systemMap;
-        //static wormholes;
-        //static wormholesBySystemId;
-        //static wormholeMap;
         static pathFindingFunction = null;
         static resultCache = new Map();
 
@@ -920,13 +794,6 @@ a.icon { text-decoration: none !important; }
                     action: () => GM_setClipboard(String(row.position), "text"),
                 });
             }
-            // 'Compute shortest path' menu item
-            if (row.x != null && refPoint.x != null) {
-                actions.push({
-                    label: `<a href="#" class="icon">${ICON.Path} Find shortest path from ${refPoint.name} to ${row.name}</a>`,
-                    action: () => findShortestPath(row),
-                });
-            }
 
             return actions;
         },
@@ -941,6 +808,7 @@ a.icon { text-decoration: none !important; }
             xerror("No refPoint found; using default");
             refPoint = {x: 0, y: 0, z: 0, name: "???"};
         }
+
         // Header tooltips
         const HTT = {
             ID: "Identifier of the colony/fleet/rally point/wormhole etc",
@@ -951,12 +819,24 @@ a.icon { text-decoration: none !important; }
             PATH: `Shortest path, using wormholes, in mkm (only between systems, for now)`,
             DIR: `O’clock direction from ${refPoint.name}; relative vertical direction (in degrees) is in tooltip`,
         };
-        // collect/compute/process data
+
+        // collect objects for the table
+        const systemIdsForPathfinding = new Set();
+        const objects = [];
+        if (dialogProfile.colonies) await addAllColonies(systemIdsForPathfinding, objects);
+        if (dialogProfile.fleets) await addAllFleets(systemIdsForPathfinding, objects);
+        if (dialogProfile.rps) await addAllRallyPoints(systemIdsForPathfinding, objects);
+        if (dialogProfile.whs) await addAllWormholes(systemIdsForPathfinding, objects);
+        // prepare pathfinding
+        if (systemIdsForPathfinding.size > 0) {
+            await initializePathfinding(systemIdsForPathfinding, [
+                {id: -1, name: refPoint.name ?? "(start)", x: refPoint.x, y: refPoint.y, z: refPoint.z}
+            ]);
+        }
+        // collect row data
         const data = [];
-        if (dialogProfile.colonies) await addAllColonies(data);
-        if (dialogProfile.fleets) await addAllFleets(data);
-        if (dialogProfile.rps) await addAllRallyPoints(data);
-        if (dialogProfile.whs) await addAllWormholes(data);
+        objects.forEach(item => data.push(_fillFrom(item.type, item.icon, item.object)));
+
         // define columns
         let columns = [
             {title: "#", formatter: "rownum", width: 40, hozAlign: "center", headerSort: false, download: false},
@@ -990,9 +870,10 @@ a.icon { text-decoration: none !important; }
             {title: "Updated", field: "ts", headerSort: false, minWidth: 70, maxWidth: 120, formatter: FMT.TS, tooltip: TT.UPDATED}
         ];
         // remove columns if not appropriate
-        if (!dialogProfile.colonies) columns = columns.filter(c => !["pop", "size", "path"].includes(c.field));
+        if (!dialogProfile.colonies) columns = columns.filter(c => !["pop", "size"].includes(c.field));
         if (!dialogProfile.fleets) columns = columns.filter(c => !["sig", "ships", "tonnage"].includes(c.field));
         if (!dialogProfile.fleets && !dialogProfile.colonies) columns = columns.filter(c => !["player", "id"].includes(c.field));
+        if (!dialogProfile.colonies && !dialogProfile.whs) columns = columns.filter(c => !["path"].includes(c.field));
 
         // create table
         try {
